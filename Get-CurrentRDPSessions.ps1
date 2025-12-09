@@ -52,13 +52,14 @@ function Get-CurrentRDPSessions {
             }
         }
         else {
+            # PowerShell 5.1 - Use Unicode symbols that work in Windows Console
             $emojis = @{
-                'computer' = '[PC]'
-                'clock'    = '[TIME]'
-                'user'     = '[USER]'
-                'check'    = '[OK]'
-                'warning'  = '[!]'
-                'chart'    = '[INFO]'
+                'computer' = "$([char]0x25A3)"  # White square with rounded corners
+                'clock'    = "$([char]0x25D4)"  # Circle with upper right quadrant
+                'user'     = "$([char]0x263A)"  # White smiling face
+                'check'    = "$([char]0x221A)"  # Square root (checkmark-like)
+                'warning'  = "$([char]0x203C)"  # Double exclamation
+                'chart'    = "$([char]0x25A0)"  # Black square
             }
         }
         return $emojis[$Name]
