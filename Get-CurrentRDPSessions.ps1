@@ -1,3 +1,6 @@
+#Requires -RunAsAdministrator
+
+function Get-CurrentRDPSessions {
 <#
 .SYNOPSIS
     Display current active RDP sessions on the system.
@@ -13,11 +16,11 @@
     Show running processes for each session.
 
 .EXAMPLE
-    .\Get-CurrentRDPSessions.ps1
+    Get-CurrentRDPSessions
     Display all current RDP sessions.
 
 .EXAMPLE
-    .\Get-CurrentRDPSessions.ps1 -SessionID 3 -ShowProcesses
+    Get-CurrentRDPSessions -SessionID 3 -ShowProcesses
     Show detailed information and processes for session 3.
 
 .NOTES
@@ -33,8 +36,6 @@ param(
     [Parameter()]
     [switch]$ShowProcesses
 )
-
-#Requires -RunAsAdministrator
 
 Write-Host "`n=== Current RDP Sessions ===" -ForegroundColor Cyan
 Write-Host "Computer: $env:COMPUTERNAME" -ForegroundColor Gray
