@@ -50,7 +50,8 @@ function Get-CurrentRDPSessions {
                 'warning'  = [char]::ConvertFromUtf32(0x26A0) + [char]::ConvertFromUtf32(0xFE0F)
                 'chart'    = [char]::ConvertFromUtf32(0x1F4CA)
             }
-        } else {
+        }
+        else {
             $emojis = @{
                 'computer' = '[PC]'
                 'clock'    = '[TIME]'
