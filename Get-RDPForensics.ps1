@@ -80,33 +80,34 @@ function Get-RDPForensics {
         param([string]$Name)
         if ($PSVersionTable.PSVersion.Major -ge 6) {
             $emojis = @{
-                'shield'    = [char]::ConvertFromUtf32(0x1F6E1) + [char]::ConvertFromUtf32(0xFE0F)
-                'magnify'   = [char]::ConvertFromUtf32(0x1F50D)
-                'check'     = [char]::ConvertFromUtf32(0x2705)
-                'cross'     = [char]::ConvertFromUtf32(0x274C)
-                'warning'   = [char]::ConvertFromUtf32(0x26A0) + [char]::ConvertFromUtf32(0xFE0F)
-                'clock'     = [char]::ConvertFromUtf32(0x23F1) + [char]::ConvertFromUtf32(0xFE0F)
-                'computer'  = [char]::ConvertFromUtf32(0x1F4BB)
-                'lock'      = [char]::ConvertFromUtf32(0x1F512)
-                'key'       = [char]::ConvertFromUtf32(0x1F511)
-                'chart'     = [char]::ConvertFromUtf32(0x1F4CA)
-                'folder'    = [char]::ConvertFromUtf32(0x1F4C1)
-                'rocket'    = [char]::ConvertFromUtf32(0x1F680)
+                'shield'   = [char]::ConvertFromUtf32(0x1F6E1) + [char]::ConvertFromUtf32(0xFE0F)
+                'magnify'  = [char]::ConvertFromUtf32(0x1F50D)
+                'check'    = [char]::ConvertFromUtf32(0x2705)
+                'cross'    = [char]::ConvertFromUtf32(0x274C)
+                'warning'  = [char]::ConvertFromUtf32(0x26A0) + [char]::ConvertFromUtf32(0xFE0F)
+                'clock'    = [char]::ConvertFromUtf32(0x23F1) + [char]::ConvertFromUtf32(0xFE0F)
+                'computer' = [char]::ConvertFromUtf32(0x1F4BB)
+                'lock'     = [char]::ConvertFromUtf32(0x1F512)
+                'key'      = [char]::ConvertFromUtf32(0x1F511)
+                'chart'    = [char]::ConvertFromUtf32(0x1F4CA)
+                'folder'   = [char]::ConvertFromUtf32(0x1F4C1)
+                'rocket'   = [char]::ConvertFromUtf32(0x1F680)
             }
-        } else {
+        }
+        else {
             $emojis = @{
-                'shield'    = '[SHIELD]'
-                'magnify'   = '[SEARCH]'
-                'check'     = '[OK]'
-                'cross'     = '[X]'
-                'warning'   = '[!]'
-                'clock'     = '[TIME]'
-                'computer'  = '[PC]'
-                'lock'      = '[LOCK]'
-                'key'       = '[KEY]'
-                'chart'     = '[CHART]'
-                'folder'    = '[FOLDER]'
-                'rocket'    = '[>>]'
+                'shield'   = '[SHIELD]'
+                'magnify'  = '[SEARCH]'
+                'check'    = '[OK]'
+                'cross'    = '[X]'
+                'warning'  = '[!]'
+                'clock'    = '[TIME]'
+                'computer' = '[PC]'
+                'lock'     = '[LOCK]'
+                'key'      = '[KEY]'
+                'chart'    = '[CHART]'
+                'folder'   = '[FOLDER]'
+                'rocket'   = '[>>]'
             }
         }
         return $emojis[$Name]
