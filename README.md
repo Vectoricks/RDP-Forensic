@@ -262,9 +262,8 @@ For large environments with extensive logs:
 
 ## Additional Resources
 
-- [Original Article: RDP Connection Logs Forensics in Windows](https://woshub.com/rdp-connection-logs-forensics-windows/)
 - [Microsoft: Audit logon events](https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/basic-audit-logon-events)
-- [Microsoft: Remote Desktop Services event logs](https://docs.microsoft.com/en-us/troubleshoot/windows-server/remote/event-log-entries-for-remote-desktop-services)
+- [Microsoft: Remote Desktop Services event logs Troubeshooting]([https://docs.microsoft.com/en-us/troubleshoot/windows-server/remote/event-log-entries-for-remote-desktop-services](https://learn.microsoft.com/en-us/troubleshoot/windows-server/remote/log-files-to-troubleshoot-rds-issues))
 
 ## Version History
 
