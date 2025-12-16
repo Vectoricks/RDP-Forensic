@@ -133,11 +133,12 @@ function Get-CurrentRDPSessions {
         WTSIsRemoteSession
     }
     
-    [StructLayout(LayoutKind.Sequential)]
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     public struct WTS_SESSION_INFO
     {
         public int SessionId;
-        public IntPtr pWinStationName;
+        [MarshalAs(UnmanagedType.LPTStr)]
+        public string pWinStationName;
         public WTS_CONNECTSTATE_CLASS State;
     }
     
@@ -350,8 +351,8 @@ function Get-CurrentRDPSessions {
                     $offset = [IntPtr]::Add($sessionInfoPtr, $i * $sessionInfoSize)
                     $sessionInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($offset, [Type][WTS_SESSION_INFO])
                     
-                    # WTS API returns Unicode strings - use PtrToStringUni explicitly
-                    $sessionName = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($sessionInfo.pWinStationName)
+                    # Session name is now directly available as string (marshaled by structure)
+                    $sessionName = $sessionInfo.pWinStationName
                     $state = $sessionInfo.State.ToString()
                     
                     # DEBUG: Show all sessions
