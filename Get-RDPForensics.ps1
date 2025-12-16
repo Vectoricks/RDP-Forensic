@@ -905,8 +905,17 @@ function Get-RDPForensics {
                         $null 
                     }
                 
-                    $userName = if ($message -match 'Subject:.*?Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    $accountName = if ($message -match 'Subject:.*?Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $userDomain = if ($message -match 'Subject:.*?Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    
+                    # Construct DOMAIN\User format to match TerminalServices events
+                    if ($userDomain -ne 'N/A' -and $userDomain -ne '-' -and $accountName -ne 'N/A') {
+                        $userName = "$userDomain\$accountName"
+                    }
+                    else {
+                        $userName = $accountName
+                    }
+                    
                     $logonID = if ($message -match 'Subject:.*?Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $sessionID = if ($message -match 'Session ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                 
@@ -969,8 +978,17 @@ function Get-RDPForensics {
                         $null 
                     }
                 
-                    $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    $accountName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    
+                    # Construct DOMAIN\User format to match TerminalServices events
+                    if ($userDomain -ne 'N/A' -and $userDomain -ne '-' -and $accountName -ne 'N/A') {
+                        $userName = "$userDomain\$accountName"
+                    }
+                    else {
+                        $userName = $accountName
+                    }
+                    
                     $logonID = if ($message -match 'Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $sessionName = if ($message -match 'Session Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $sourceIP = if ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
@@ -1047,8 +1065,17 @@ function Get-RDPForensics {
                         $null 
                     }
                 
-                    $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    $accountName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    
+                    # Construct DOMAIN\User format to match TerminalServices events
+                    if ($userDomain -ne 'N/A' -and $userDomain -ne '-' -and $accountName -ne 'N/A') {
+                        $userName = "$userDomain\$accountName"
+                    }
+                    else {
+                        $userName = $accountName
+                    }
+                    
                     $logonID = if ($message -match 'Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                     $logonType = if ($message -match 'Logon Type:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                 
