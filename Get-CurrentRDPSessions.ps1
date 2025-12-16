@@ -161,7 +161,7 @@ function Get-CurrentRDPSessions {
     
     public class WTSApi
     {
-        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern bool WTSEnumerateSessions(
             IntPtr hServer,
             int Reserved,
@@ -169,7 +169,7 @@ function Get-CurrentRDPSessions {
             out IntPtr ppSessionInfo,
             out int pCount);
         
-        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        [DllImport("wtsapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
         public static extern bool WTSQuerySessionInformation(
             IntPtr hServer,
             int sessionId,
