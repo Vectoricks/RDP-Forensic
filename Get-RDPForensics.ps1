@@ -301,7 +301,8 @@ function Get-RDPForensics {
                     # Extract ActivityID from Correlation element
                     $activityID = if ($event.System.Correlation.ActivityID) { 
                         $event.System.Correlation.ActivityID 
-                    } else { 
+                    }
+                    else { 
                         $null 
                     }
                     
@@ -372,7 +373,8 @@ function Get-RDPForensics {
                     [xml]$eventXml = $event.ToXml()
                     $activityID = if ($eventXml.Event.System.Correlation.ActivityID) { 
                         $eventXml.Event.System.Correlation.ActivityID 
-                    } else { 
+                    }
+                    else { 
                         $null 
                     }
                 
@@ -479,7 +481,8 @@ function Get-RDPForensics {
                     # Extract ActivityID from Correlation element
                     $activityID = if ($event.System.Correlation.ActivityID) { 
                         $event.System.Correlation.ActivityID 
-                    } else { 
+                    }
+                    else { 
                         $null 
                     }
                 
@@ -570,7 +573,8 @@ function Get-RDPForensics {
                     [xml]$eventXml = $event.ToXml()
                     $activityID = if ($eventXml.Event.System.Correlation.ActivityID) { 
                         $eventXml.Event.System.Correlation.ActivityID 
-                    } else { 
+                    }
+                    else { 
                         $null 
                     }
                 
@@ -647,7 +651,8 @@ function Get-RDPForensics {
                     [xml]$eventXml = $event.ToXml()
                     $activityID = if ($eventXml.Event.System.Correlation.ActivityID) { 
                         $eventXml.Event.System.Correlation.ActivityID 
-                    } else { 
+                    }
+                    else { 
                         $null 
                     }
                 
@@ -679,7 +684,8 @@ function Get-RDPForensics {
                     [xml]$eventXml = $event.ToXml()
                     $activityID = if ($eventXml.Event.System.Correlation.ActivityID) { 
                         $eventXml.Event.System.Correlation.ActivityID 
-                    } else { 
+                    }
+                    else { 
                         $null 
                     }
                 
