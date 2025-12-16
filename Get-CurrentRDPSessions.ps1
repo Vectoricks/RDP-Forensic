@@ -352,6 +352,12 @@ function Get-CurrentRDPSessions {
                         if ($sessionName -match 'rdp-tcp#\d+' -and $state -notmatch 'Listen') {
                             # Use WTS API to get extended session properties
                             $clientName = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientName)
+                            # Filter out invalid client names (empty, whitespace, or non-ASCII junk)
+                            if ($clientName -and $clientName.Trim() -ne '' -and $clientName -match '^[\x20-\x7E]+$') {
+                                $clientName = $clientName.Trim()
+                            } else {
+                                $clientName = $null
+                            }
                             $clientIP = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientAddress)
                             $clientBuild = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientBuildNumber)
                             $clientDisplay = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientDisplay)
