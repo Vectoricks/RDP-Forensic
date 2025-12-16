@@ -41,10 +41,17 @@ function Get-RDPForensics {
     Exports to separate CSV file (RDP_Sessions_<timestamp>.csv) when used with -ExportPath.
 
 .PARAMETER IncludeCredentialValidation
-    Include EventID 4776 (NTLM Credential Validation) events in the analysis.
-    These events occur before RDP session creation and may not correlate via ActivityID.
+    Include pre-authentication events in the analysis:
+    - EventID 4768-4772 (Kerberos authentication: TGT, service tickets, failures)
+    - EventID 4776 (NTLM Credential Validation - used when Kerberos fails/unavailable)
+    
+    Shows complete authentication story:
+    - Kerberos attempts (4768 TGT request, 4769 service ticket)
+    - Kerberos failures (4771 pre-auth failed) that trigger NTLM fallback
+    - NTLM authentication (4776) when Kerberos unavailable or fails
+    
     Uses time-based correlation (username + timestamp proximity) to associate with sessions.
-    Useful for tracking authentication attempts, failed logins, and potential brute-force attacks.
+    Valuable for security analysis, tracking authentication methods, and identifying attack patterns.
 
 .EXAMPLE
     Get-RDPForensics
@@ -68,7 +75,8 @@ function Get-RDPForensics {
 
 .EXAMPLE
     Get-RDPForensics -IncludeCredentialValidation -GroupBySession
-    Include NTLM credential validation events (4776) with time-based correlation to RDP sessions.
+    Include Kerberos (4768-4772) and NTLM (4776) authentication events with time-based correlation.
+    Shows whether Kerberos or NTLM was used, and why Kerberos failed if NTLM fallback occurred.
 
 .NOTES
     Author: Jan Tiedemann
@@ -382,16 +390,16 @@ function Get-RDPForensics {
         }
     }
 
-    # Function to parse EventID 4624, 4625, 4776 - Authentication Events
+    # Function to parse EventID 4624, 4625, 4776, 4768-4772 - Authentication Events
     function Get-RDPAuthenticationEvents {
         param(
             [DateTime]$Start, 
             [DateTime]$End,
-            [bool]$Include4776 = $false
+            [bool]$IncludeKerberosAndNTLM = $false
         )
     
-        $eventList = if ($Include4776) { "4624, 4625, 4776" } else { "4624, 4625" }
-        Write-Host "$(Get-Emoji 'key') [2/6] Collecting RDP Authentication Events (EventID $eventList)..." -ForegroundColor Yellow
+        $eventList = if ($IncludeKerberosAndNTLM) { "4624, 4625, 4768-4772, 4776" } else { "4624, 4625" }
+        Write-Host "$(Get-Emoji 'key') [2/7] Collecting RDP Authentication Events (EventID $eventList)..." -ForegroundColor Yellow
     
         try {
             # Collect logon events (4624/4625) and credential validation events (4776)
@@ -405,9 +413,20 @@ function Get-RDPForensics {
                 $_.Message -match 'Logon Type:\s+(10|7|3|5)\s'
             }
             
-            # Optionally collect NTLM credential validation events (4776)
+            # Optionally collect Kerberos and NTLM pre-authentication events
+            $kerberosEvents = @()
             $credentialEvents = @()
-            if ($Include4776) {
+            
+            if ($IncludeKerberosAndNTLM) {
+                # Kerberos authentication events (4768-4772)
+                $kerberosEvents = Get-WinEvent -FilterHashtable @{
+                    LogName   = 'Security'
+                    Id        = 4768, 4769, 4770, 4771, 4772
+                    StartTime = $Start
+                    EndTime   = $End
+                } -ErrorAction SilentlyContinue
+                
+                # NTLM credential validation events (4776)
                 $credentialEvents = Get-WinEvent -FilterHashtable @{
                     LogName   = 'Security'
                     Id        = 4776
@@ -421,8 +440,8 @@ function Get-RDPForensics {
                 }
             }
             
-            # Combine both event types
-            $events = @($logonEvents) + @($credentialEvents)
+            # Combine all event types
+            $events = @($logonEvents) + @($kerberosEvents) + @($credentialEvents)
         
             if ($events -and $events.Count -gt 0) {
                 $results = foreach ($event in $events) {
@@ -438,64 +457,212 @@ function Get-RDPForensics {
                     }
                 
                     # Handle different event types
-                    if ($event.Id -eq 4776) {
-                        # Credential Validation (NTLM)
-                        $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $userDomain = if ($message -match 'Source Workstation:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $errorCode = if ($message -match 'Error Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $authPackage = if ($message -match 'Authentication Package:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'NTLM' }
-                        
-                        $eventType = if ($errorCode -eq '0x0') { 'Credential Validation Success' } else { 'Credential Validation Failed' }
-                        $details = "$authPackage | Error Code: $errorCode | Source: $userDomain"
-                        
-                        [PSCustomObject]@{
-                            TimeCreated = $event.TimeCreated
-                            EventID     = $event.Id
-                            EventType   = $eventType
-                            User        = $userName
-                            Domain      = 'N/A'
-                            SourceIP    = 'N/A'
-                            SessionID   = $null
-                            LogonID     = $null
-                            ActivityID  = $activityID
-                            Details     = $details
+                    switch ($event.Id) {
+                        4768 {
+                            # Kerberos TGT Request
+                            $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
+                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                                       else { 'N/A' }
+                            $statusCode = if ($message -match 'Result Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $ticketOptions = if ($message -match 'Ticket Options:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            
+                            $eventType = if ($statusCode -eq '0x0') { 'Kerberos TGT Success' } else { 'Kerberos TGT Failed' }
+                            $details = "Result: $statusCode | Options: $ticketOptions"
+                            
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = $userDomain
+                                SourceIP    = $sourceIP
+                                SessionID   = $null
+                                LogonID     = $null
+                                ActivityID  = $activityID
+                                Details     = $details
+                            }
                         }
-                    }
-                    else {
-                        # Logon/Failed Logon (4624/4625)
-                        $userName = if ($message -match '\s\sAccount Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $userDomain = if ($message -match '\s\sAccount Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $sourceIP = if ($message -match 'Source Network Address:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $logonType = if ($message -match 'Logon Type:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $logonID = if ($message -match 'Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                        $workstation = if ($message -match 'Workstation Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                    
-                        $logonTypeDesc = switch ($logonType) {
-                            '2' { 'Interactive (Local)' }
-                            '3' { 'Network' }
-                            '4' { 'Batch' }
-                            '5' { 'Service/Console' }
-                            '7' { 'Unlock/Reconnect' }
-                            '8' { 'NetworkCleartext' }
-                            '9' { 'NewCredentials' }
-                            '10' { 'RemoteInteractive (RDP)' }
-                            '11' { 'CachedInteractive' }
-                            default { "Unknown ($logonType)" }
+                        4769 {
+                            # Kerberos Service Ticket Request
+                            $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $serviceName = if ($message -match 'Service Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
+                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                                       else { 'N/A' }
+                            $statusCode = if ($message -match 'Failure Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { '0x0' }
+                            
+                            $eventType = if ($statusCode -eq '0x0') { 'Kerberos Service Ticket Success' } else { 'Kerberos Service Ticket Failed' }
+                            $details = "Service: $serviceName | Result: $statusCode"
+                            
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = $userDomain
+                                SourceIP    = $sourceIP
+                                SessionID   = $null
+                                LogonID     = $null
+                                ActivityID  = $activityID
+                                Details     = $details
+                            }
                         }
-                    
-                        $eventType = if ($event.Id -eq 4624) { 'Successful Logon' } else { 'Failed Logon' }
-                    
-                        [PSCustomObject]@{
-                            TimeCreated = $event.TimeCreated
-                            EventID     = $event.Id
-                            EventType   = $eventType
-                            User        = $userName
-                            Domain      = $userDomain
-                            SourceIP    = $sourceIP
-                            SessionID   = $null
-                            LogonID     = $logonID
-                            ActivityID  = $activityID
-                            Details     = "$logonTypeDesc | Workstation: $workstation"
+                        4770 {
+                            # Kerberos Service Ticket Renewal
+                            $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $serviceName = if ($message -match 'Service Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
+                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                                       else { 'N/A' }
+                            
+                            $eventType = 'Kerberos Ticket Renewed'
+                            $details = "Service: $serviceName"
+                            
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = $userDomain
+                                SourceIP    = $sourceIP
+                                SessionID   = $null
+                                LogonID     = $null
+                                ActivityID  = $activityID
+                                Details     = $details
+                            }
+                        }
+                        4771 {
+                            # Kerberos Pre-authentication Failed (KEY EVENT - shows why Kerberos failed)
+                            $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $userDomain = if ($message -match 'Service Name:\s+krbtgt/([^\r\n]+)') { $matches[1].Trim() } 
+                                         elseif ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                                         else { 'N/A' }
+                            $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
+                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                                       else { 'N/A' }
+                            $errorCode = if ($message -match 'Failure Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            
+                            # Common Kerberos error codes
+                            $errorDesc = switch ($errorCode) {
+                                '0x6' { 'Client not found' }
+                                '0x7' { 'Server not found' }
+                                '0xC' { 'Workstation restriction' }
+                                '0x12' { 'Client revoked/disabled' }
+                                '0x17' { 'Password expired' }
+                                '0x18' { 'Wrong password' }
+                                '0x25' { 'Clock skew too large' }
+                                default { "Code $errorCode" }
+                            }
+                            
+                            $eventType = 'Kerberos Pre-auth Failed'
+                            $details = "Error: $errorDesc | Source: $sourceIP"
+                            
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = $userDomain
+                                SourceIP    = $sourceIP
+                                SessionID   = $null
+                                LogonID     = $null
+                                ActivityID  = $activityID
+                                Details     = $details
+                            }
+                        }
+                        4772 {
+                            # Kerberos Authentication Ticket Request Failed
+                            $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
+                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                                       else { 'N/A' }
+                            $errorCode = if ($message -match 'Failure Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            
+                            $eventType = 'Kerberos Ticket Request Failed'
+                            $details = "Error Code: $errorCode"
+                            
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = $userDomain
+                                SourceIP    = $sourceIP
+                                SessionID   = $null
+                                LogonID     = $null
+                                ActivityID  = $activityID
+                                Details     = $details
+                            }
+                        }
+                        4776 {
+                            # NTLM Credential Validation
+                            # 4776 has format "Logon Account: DOMAIN\Username"
+                            $logonAccount = if ($message -match 'Logon Account:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            # Extract just the username if domain\username format
+                            $userName = if ($logonAccount -match '\\(.+)$') { $matches[1] } 
+                                       elseif ($logonAccount -ne 'N/A') { $logonAccount } 
+                                       else { 'N/A' }
+                            $userDomain = if ($message -match 'Source Workstation:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $errorCode = if ($message -match 'Error Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $authPackage = if ($message -match 'Authentication Package:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'NTLM' }
+                            
+                            $eventType = if ($errorCode -eq '0x0') { 'NTLM Validation Success' } else { 'NTLM Validation Failed' }
+                            $details = "$authPackage | Error Code: $errorCode | Source: $userDomain"
+                            
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = 'N/A'
+                                SourceIP    = 'N/A'
+                                SessionID   = $null
+                                LogonID     = $null
+                                ActivityID  = $activityID
+                                Details     = $details
+                            }
+                        }
+                        default {
+                            # Logon/Failed Logon (4624/4625)
+                            $userName = if ($message -match '\s\sAccount Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $userDomain = if ($message -match '\s\sAccount Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $sourceIP = if ($message -match 'Source Network Address:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $logonType = if ($message -match 'Logon Type:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $logonID = if ($message -match 'Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                            $workstation = if ($message -match 'Workstation Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        
+                            $logonTypeDesc = switch ($logonType) {
+                                '2' { 'Interactive (Local)' }
+                                '3' { 'Network' }
+                                '4' { 'Batch' }
+                                '5' { 'Service/Console' }
+                                '7' { 'Unlock/Reconnect' }
+                                '8' { 'NetworkCleartext' }
+                                '9' { 'NewCredentials' }
+                                '10' { 'RemoteInteractive (RDP)' }
+                                '11' { 'CachedInteractive' }
+                                default { "Unknown ($logonType)" }
+                            }
+                        
+                            $eventType = if ($event.Id -eq 4624) { 'Successful Logon' } else { 'Failed Logon' }
+                        
+                            [PSCustomObject]@{
+                                TimeCreated = $event.TimeCreated
+                                EventID     = $event.Id
+                                EventType   = $eventType
+                                User        = $userName
+                                Domain      = $userDomain
+                                SourceIP    = $sourceIP
+                                SessionID   = $null
+                                LogonID     = $logonID
+                                ActivityID  = $activityID
+                                Details     = "$logonTypeDesc | Workstation: $workstation"
+                            }
                         }
                     }
                 }
@@ -895,7 +1062,7 @@ function Get-RDPForensics {
     # Collect all events
     $allEvents = @()
     $allEvents += Get-RDPConnectionAttempts -Start $StartDate -End $EndDate
-    $allEvents += Get-RDPAuthenticationEvents -Start $StartDate -End $EndDate -Include4776 $IncludeCredentialValidation.IsPresent
+    $allEvents += Get-RDPAuthenticationEvents -Start $StartDate -End $EndDate -IncludeKerberosAndNTLM $IncludeCredentialValidation.IsPresent
     $allEvents += Get-RDPSessionEvents -Start $StartDate -End $EndDate
     $allEvents += Get-RDPLockUnlockEvents -Start $StartDate -End $EndDate
     $allEvents += Get-RDPSessionReconnectEvents -Start $StartDate -End $EndDate

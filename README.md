@@ -100,27 +100,40 @@ Most RDP events (1149, 21-25, 39, 40, 9009) are logged by default in Terminal Se
 - EventID 4634, 4647 (Logoff) - Requires "Audit Logon Events"
 - EventID 4778, 4779 (Session Reconnect/Disconnect) - Requires "Audit Other Logon/Logoff Events"
 - EventID 4800, 4801 (Workstation Lock/Unlock) - Requires "Audit Other Logon/Logoff Events"
+- **EventID 4768-4772 (Kerberos) - Requires "Audit Kerberos Authentication Service" (optional)**
+- **EventID 4776 (NTLM) - Requires "Audit Credential Validation" (optional)**
 
 **Enable via PowerShell (recommended):**
 ```powershell
-# Enable logon auditing
+# Enable required logon auditing
 auditpol /set /subcategory:"Logon" /success:enable /failure:enable
 auditpol /set /subcategory:"Logoff" /success:enable
 auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
 
+# OPTIONAL: Enable pre-authentication tracking (for -IncludeCredentialValidation)
+auditpol /set /subcategory:"Kerberos Authentication Service" /success:enable /failure:enable
+auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
+
 # Verify settings
 auditpol /get /category:"Logon/Logoff"
+auditpol /get /category:"Account Logon"
 ```
 
 **Enable via Group Policy (for domain environments):**
 ```
 Computer Configuration → Policies → Windows Settings → Security Settings →
-Advanced Audit Policy Configuration → Audit Policies → Logon/Logoff
+Advanced Audit Policy Configuration → Audit Policies
 
-Enable:
+**Required:**
+Logon/Logoff:
 - Audit Logon (Success, Failure)
 - Audit Logoff (Success)
 - Audit Other Logon/Logoff Events (Success, Failure)
+
+**Optional (for -IncludeCredentialValidation):**
+Account Logon:
+- Audit Kerberos Authentication Service (Success, Failure)
+- Audit Credential Validation (Success, Failure)
 ```
 
 **Note:** Most Windows systems have logon auditing enabled by default. The tool will still work without these policies, but event correlation may be less complete (missing 4624/4634/4778/4779 events).
@@ -179,7 +192,8 @@ Get-RDPForensics -GroupBySession
 # **NEW v1.0.4** - Analyze complete session lifecycles with export
 Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports\RDP"
 
-# **NEW v1.0.6** - Include NTLM credential validation (4776) with time-based correlation
+# **NEW v1.0.6** - Include Kerberos (4768-4772) and NTLM (4776) authentication events
+# Shows complete auth story: Kerberos attempts, failures (4771), NTLM fallback
 Get-RDPForensics -IncludeCredentialValidation -GroupBySession
 
 # Include outbound RDP connections
@@ -223,7 +237,7 @@ Get-RDPForensics -Username "admin" -GroupBySession -StartDate (Get-Date).AddMont
 - **Duration Calculation** - Accurate session time from first event to last
 - **Anomaly Detection** - Identifies incomplete sessions (e.g., logon without logoff)
 - **Dual Export** - Saves both raw events AND session summaries to CSV
-- **Optional Credential Validation (NEW v1.0.6)** - Include EventID 4776 (NTLM auth) with time-based correlation for pre-session authentication tracking
+- **Optional Pre-Authentication Events (NEW v1.0.6)** - Include EventIDs 4768-4772 (Kerberos: TGT, service tickets, failures) and 4776 (NTLM fallback) with time-based correlation. Shows complete authentication protocol flow and why Kerberos failed if NTLM was used
 
 **Advanced Forensic Filtering Examples:**
 
@@ -367,6 +381,17 @@ Timestamp,EventType,SessionName,Username,SessionID,State,SourceIP,Details
 ### Authentication
 - **4624** - An account was successfully logged on
 - **4625** - An account failed to log on
+
+### Pre-Authentication (Optional with -IncludeCredentialValidation)
+**Kerberos Events:**
+- **4768** - Kerberos TGT (Ticket Granting Ticket) request
+- **4769** - Kerberos service ticket request
+- **4770** - Kerberos service ticket renewed
+- **4771** - Kerberos pre-authentication failed (shows why Kerberos failed before NTLM fallback)
+- **4772** - Kerberos authentication ticket request failed
+
+**NTLM Events:**
+- **4776** - NTLM credential validation (used when Kerberos unavailable or fails)
 
 ### Session Events (TerminalServices-LocalSessionManager)
 - **21** - Session logon succeeded
