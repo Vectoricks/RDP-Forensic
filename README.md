@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20Server%20%7C%20Windows%2010%2F11-0078D4?logo=windows)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-1.0.2-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.0.3-brightgreen)
 ![Requires Admin](https://img.shields.io/badge/Requires-Administrator-red)
 ![Event Logs](https://img.shields.io/badge/Event%20Logs-Security%20%7C%20TerminalServices-orange)
 
@@ -190,6 +190,7 @@ Quick analysis script for viewing currently active RDP sessions.
 - Shows recent logon information for active users
 - **Auto-refresh monitoring mode** for real-time session tracking
 - Customizable refresh intervals (1-300 seconds)
+- **Change logging** - Records session changes to CSV for forensic analysis
 
 **Usage Examples:**
 
@@ -214,6 +215,15 @@ Get-CurrentRDPSessions -Watch -ShowProcesses -RefreshInterval 15
 
 # Monitor during incident response with 3-second updates
 Get-CurrentRDPSessions -Watch -RefreshInterval 3
+
+# CHANGE LOGGING: Monitor with automatic change logging for forensic analysis
+Get-CurrentRDPSessions -Watch -LogPath "C:\Logs\RDP_Monitor"
+
+# Full monitoring - Watch mode with logging and process tracking
+Get-CurrentRDPSessions -Watch -RefreshInterval 5 -LogPath "C:\SecurityLogs\RDP" -ShowProcesses
+
+# Single check with logging (no Watch mode)
+Get-CurrentRDPSessions -LogPath "C:\Logs\RDP_Audit"
 ```
 
 **Real-Time Monitoring:**
@@ -226,6 +236,24 @@ The `-Watch` parameter enables continuous monitoring mode that automatically ref
 - Monitoring user activity during audits
 
 Press `Ctrl+C` to exit watch mode at any time.
+
+**Change Logging:**
+
+The `-LogPath` parameter enables forensic change logging:
+- **New Sessions** - Logs when new RDP connections are established
+- **State Changes** - Records when sessions change state (Active ↔ Disconnected)
+- **Session Ended** - Logs when sessions terminate
+- **CSV Format** - Timestamped entries for easy analysis in Excel or log analysis tools
+- **Works with or without Watch mode** - Can log single checks or continuous monitoring
+- **Forensic Timeline** - Creates complete audit trail of all session activity
+
+Example log output:
+```
+Timestamp,EventType,SessionName,Username,SessionID,State,SourceIP,Details
+2025-12-16 09:15:23,NEW_SESSION,rdp-tcp#2,john.doe,3,Active,,New RDP session detected
+2025-12-16 09:45:10,STATE_CHANGE,rdp-tcp#2,john.doe,3,Disc,,State changed from Active to Disc
+2025-12-16 10:02:45,SESSION_ENDED,rdp-tcp#2,john.doe,3,Disc,,Session ended or disconnected
+```
 
 > **Note:** Import the module first with `Import-Module .\RDP-Forensic.psm1` to use these commands directly.
 

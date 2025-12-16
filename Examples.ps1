@@ -8,7 +8,7 @@
 
 .NOTES
     Author: Jan Tiedemann
-    Version: 1.0.2
+    Version: 1.0.3
     Uncomment the scenarios you want to run.
 #>
 
@@ -271,12 +271,20 @@ Write-Host ""
 # Option 4: Slower monitoring for long-term observation (30-second refresh)
 # .\Get-CurrentRDPSessions.ps1 -Watch -RefreshInterval 30
 
+# Option 5: Monitor with change logging for forensic analysis
+# .\Get-CurrentRDPSessions.ps1 -Watch -LogPath "C:\Logs\RDP_Monitor"
+
+# Option 6: Full monitoring - Watch, logging, and process tracking
+# .\Get-CurrentRDPSessions.ps1 -Watch -RefreshInterval 5 -LogPath "C:\SecurityLogs\RDP" -ShowProcesses
+
 Write-Host "`nReal-time monitoring provides:" -ForegroundColor Yellow
 Write-Host "  - Automatic screen refresh at configured intervals" -ForegroundColor Gray
 Write-Host "  - Live session state tracking (Active/Disconnected)" -ForegroundColor Gray
 Write-Host "  - Immediate detection of new connections" -ForegroundColor Gray
 Write-Host "  - Continuous user activity monitoring" -ForegroundColor Gray
 Write-Host "  - Real-time logon information updates" -ForegroundColor Gray
+Write-Host "  - Change logging to CSV for forensic analysis (with -LogPath)" -ForegroundColor Gray
+Write-Host "  - Logs new sessions, state changes, and disconnections" -ForegroundColor Gray
 #>
 
 # ============================================================================
