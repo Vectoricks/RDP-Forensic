@@ -133,12 +133,11 @@ function Get-CurrentRDPSessions {
         WTSIsRemoteSession
     }
     
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    [StructLayout(LayoutKind.Sequential)]
     public struct WTS_SESSION_INFO
     {
         public int SessionId;
-        [MarshalAs(UnmanagedType.LPTStr)]
-        public string pWinStationName;
+        public IntPtr pWinStationName;
         public WTS_CONNECTSTATE_CLASS State;
     }
     
@@ -351,16 +350,18 @@ function Get-CurrentRDPSessions {
                     $offset = [IntPtr]::Add($sessionInfoPtr, $i * $sessionInfoSize)
                     $sessionInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($offset, [Type][WTS_SESSION_INFO])
                     
-                    # Session name is now directly available as string (marshaled by structure)
-                    $sessionName = $sessionInfo.pWinStationName
+                    # Get session name using WTSQuerySessionInformation for proper string handling
+                    $sessionName = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSWinStationName)
+                    if (-not $sessionName) { $sessionName = "Unknown" }
+                    
                     $state = $sessionInfo.State.ToString()
                     
                     # DEBUG: Show all sessions
                     Write-Host "[DEBUG] Session: $sessionName | State: $state | ID: $($sessionInfo.SessionId)" -ForegroundColor Gray
                     
                     # Only include RDP sessions (exclude console, services, listeners)
-                    # Match both lowercase and uppercase variations: rdp-tcp or RDP-Tcp
-                    if ($sessionName -match 'rdp-tcp#\d+|RDP-Tcp#\d+' -and $state -ne 'WTSListen') {
+                    # Match case-insensitive: rdp-tcp or RDP-Tcp
+                    if ($sessionName -match '(?i)rdp-tcp#\d+' -and $state -ne 'WTSListen') {
                         # Query extended session information
                         $username = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSUserName)
                         $clientName = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientName)
