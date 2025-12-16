@@ -15,25 +15,25 @@ This is the **only comprehensive, open-source PowerShell-native RDP forensics so
 
 ### Comparison Matrix
 
-| Feature | This Toolkit | Basic PowerShell<br/>(Get-EventLog) | Commercial SIEM<br/>(Splunk, QRadar) | Manual Event Viewer | Third-Party Tools<br/>(Paid Software) |
-|---------|--------------|-------------------------------------|---------------------------------------|---------------------|---------------------------------------|
-| **Cost** | ✅ Free & Open Source | ✅ Built-in | ❌ $1000s+/year | ✅ Built-in | ❌ $500-5000+ |
-| **Event Coverage** | ✅ 15+ Event IDs | ⚠️ Manual queries | ✅ Configurable | ⚠️ Manual filtering | ✅ Varies |
-| **Multi-Log Correlation** | ✅ 5 log sources | ❌ One at a time | ✅ Yes | ❌ Manual switching | ✅ Yes |
-| **Lifecycle Tracking** | ✅ 6 stages | ❌ No | ⚠️ Custom rules | ❌ No | ⚠️ Limited |
-| **Brute Force Detection** | ✅ Built-in | ❌ Manual analysis | ✅ Yes | ❌ No | ✅ Yes |
-| **Session Duration Analysis** | ✅ Automatic | ❌ No | ✅ Custom queries | ❌ No | ⚠️ Sometimes |
-| **Export Capabilities** | ✅ CSV + Summary | ⚠️ Basic | ✅ Advanced | ⚠️ Manual export | ✅ Yes |
-| **Real-time Monitoring** | ✅ Current sessions | ❌ No | ✅ Yes | ⚠️ Limited | ✅ Yes |
-| **Filtering** | ✅ User/IP/Date | ⚠️ Basic Where-Object | ✅ Advanced | ⚠️ Basic | ✅ Advanced |
-| **Documentation** | ✅ Comprehensive | ⚠️ Microsoft Docs | ✅ Vendor docs | ⚠️ Basic | ✅ Vendor docs |
-| **Learning Curve** | ✅ Low (examples included) | ⚠️ Medium | ❌ High | ✅ Low | ⚠️ Medium-High |
-| **Deployment** | ✅ Copy & run | ✅ Built-in | ❌ Complex setup | ✅ Built-in | ⚠️ Installation required |
-| **Customization** | ✅ Full source access | ✅ Script yourself | ⚠️ Limited | ❌ No | ❌ Proprietary |
-| **Forensic Focus** | ✅ Purpose-built | ❌ General purpose | ⚠️ Generic security | ❌ General purpose | ⚠️ Varies |
-| **Incident Response** | ✅ Ready-to-use scenarios | ❌ DIY | ✅ Yes | ❌ Manual | ✅ Yes |
-| **No Internet Required** | ✅ Offline capable | ✅ Yes | ⚠️ Depends | ✅ Yes | ⚠️ Varies |
-| **Script Size** | ✅ Lightweight (~25KB) | N/A | ❌ Heavy agent | N/A | ⚠️ Varies |
+| Feature | This Toolkit | Basic PowerShell<br/>(Get-EventLog) | Manual Event Viewer |
+|---------|--------------|-------------------------------------|---------------------|
+| **Cost** | ✅ Free & Open Source | ✅ Built-in | ✅ Built-in |
+| **Event Coverage** | ✅ 15+ Event IDs | ⚠️ Manual queries | ⚠️ Manual filtering |
+| **Multi-Log Correlation** | ✅ 5 log sources | ❌ One at a time | ❌ Manual switching |
+| **Lifecycle Tracking** | ✅ 6 stages | ❌ No | ❌ No |
+| **Brute Force Detection** | ✅ Built-in | ❌ Manual analysis | ❌ No |
+| **Session Duration Analysis** | ✅ Automatic | ❌ No | ❌ No |
+| **Export Capabilities** | ✅ CSV + Summary | ⚠️ Basic | ⚠️ Manual export |
+| **Real-time Monitoring** | ✅ Current sessions | ❌ No | ⚠️ Limited |
+| **Filtering** | ✅ User/IP/Date | ⚠️ Basic Where-Object | ⚠️ Basic |
+| **Documentation** | ✅ Comprehensive | ⚠️ Microsoft Docs | ⚠️ Basic |
+| **Learning Curve** | ✅ Low (examples included) | ⚠️ Medium | ✅ Low |
+| **Deployment** | ✅ Copy & run | ✅ Built-in | ✅ Built-in |
+| **Customization** | ✅ Full source access | ✅ Script yourself | ❌ No |
+| **Forensic Focus** | ✅ Purpose-built | ❌ General purpose | ❌ General purpose |
+| **Incident Response** | ✅ Ready-to-use scenarios | ❌ DIY | ❌ Manual |
+| **No Internet Required** | ✅ Offline capable | ✅ Yes | ✅ Yes |
+| **Script Size** | ✅ Lightweight (~25KB) | N/A | N/A |
 
 ### Key Differentiators
 
@@ -44,26 +44,12 @@ This is the **only comprehensive, open-source PowerShell-native RDP forensics so
 - 🛡️ Built-in brute force attack detection
 - 📝 Comprehensive event parsing (no regex needed)
 
-**vs. Commercial SIEM Solutions:**
-- 💰 Zero licensing costs
-- 🚀 No complex deployment or agents
-- 🔧 Full source code access for customization
-- 📦 Standalone operation (no server infrastructure)
-- 🎓 Lower learning curve with examples
-
 **vs. Manual Event Viewer:**
 - ⚡ Automated collection across multiple logs
 - 🔗 Correlates events by LogonID and SessionID
 - 📈 Statistical analysis and trending
 - 💾 Export to formats suitable for analysis
 - ⏱️ Saves hours of manual investigation time
-
-**vs. Third-Party Security Tools:**
-- 🆓 No subscription or licensing fees
-- 🔓 Open-source transparency
-- 🎯 RDP-specific focus (not generic)
-- 🔄 Regular updates from community
-- 🛠️ Easily extensible and customizable
 
 ## Overview
 
