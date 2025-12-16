@@ -11,7 +11,14 @@ CONNECTION ATTEMPTS
 AUTHENTICATION
 ├─ 4624: Successful logon (Security)
 ├─ 4625: Failed logon (Security)
-├─ 4776: NTLM credential validation (Security) - Optional
+
+PRE-AUTHENTICATION (Optional with -IncludeCredentialValidation)
+├─ 4768: Kerberos TGT request (Security)
+├─ 4769: Kerberos service ticket request (Security)
+├─ 4770: Kerberos ticket renewed (Security)
+├─ 4771: Kerberos pre-authentication failed (Security) ⚠️ Shows why Kerberos failed
+├─ 4772: Kerberos ticket request failed (Security)
+└─ 4776: NTLM credential validation (Security) - Fallback when Kerberos fails
 
 SESSION LIFECYCLE
 ├─ 21: Session logon succeeded (LocalSessionManager)

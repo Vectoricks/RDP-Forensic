@@ -168,13 +168,18 @@ Perfect for:
 
 **Quick Enable via PowerShell:**
 ```powershell
-# Enable logon auditing (run as Administrator)
+# Enable required logon auditing (run as Administrator)
 auditpol /set /subcategory:"Logon" /success:enable /failure:enable
 auditpol /set /subcategory:"Logoff" /success:enable
 auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
 
+# OPTIONAL: Enable pre-authentication tracking (for -IncludeCredentialValidation parameter)
+auditpol /set /subcategory:"Kerberos Authentication Service" /success:enable /failure:enable
+auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
+
 # Verify
 auditpol /get /category:"Logon/Logoff"
+auditpol /get /category:"Account Logon"
 ```
 
 **Or via Local Security Policy:**
@@ -183,13 +188,24 @@ auditpol /get /category:"Logon/Logoff"
 3. Enable:
    - Audit Logon Events → Success, Failure
    - Audit Account Logon Events → Success, Failure
-   - Audit Credential Validation → Success, Failure (for EventID 4776)
+   - **OPTIONAL:** Audit Kerberos Authentication Service → Success, Failure (for EventIDs 4768-4772)
+   - **OPTIONAL:** Audit Credential Validation → Success, Failure (for EventID 4776)
 
 **For domain environments**, configure via Group Policy:
 ```
 Computer Configuration → Policies → Windows Settings → 
-Security Settings → Advanced Audit Policy Configuration → 
-Audit Policies → Logon/Logoff
+Security Settings → Advanced Audit Policy Configuration → Audit Policies
+
+Required:
+  Logon/Logoff:
+  - Audit Logon (Success, Failure)
+  - Audit Logoff (Success)
+  - Audit Other Logon/Logoff Events (Success, Failure)
+
+Optional (for -IncludeCredentialValidation):
+  Account Logon:
+  - Audit Kerberos Authentication Service (Success, Failure)
+  - Audit Credential Validation (Success, Failure)
 ```
 
 **Note:** Most systems already have these enabled. Check with:
