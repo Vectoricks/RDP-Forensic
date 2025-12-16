@@ -166,20 +166,23 @@ Perfect for:
 
 ⚠️ **Important:** Security log events (4624, 4634, 4778, 4779) require specific audit policies to be enabled. Terminal Services logs work by default.
 
+⚠️ **Critical Limitation:** Kerberos (4768-4772) and NTLM (4776) events are logged on the **Domain Controller**, not the Terminal Server. The tool queries the local Security log, so `-IncludeCredentialValidation` will return ZERO events when running on a Terminal Server.
+
 **Quick Enable via PowerShell:**
 ```powershell
-# Enable required logon auditing (run as Administrator)
+# Run on TERMINAL SERVER - Required for RDP session tracking
 auditpol /set /subcategory:"Logon" /success:enable /failure:enable
 auditpol /set /subcategory:"Logoff" /success:enable
 auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
 
-# OPTIONAL: Enable pre-authentication tracking (for -IncludeCredentialValidation parameter)
+# Run on DOMAIN CONTROLLER - Optional for Kerberos/NTLM tracking
+# ⚠️ These events are NOT on Terminal Server!
 auditpol /set /subcategory:"Kerberos Authentication Service" /success:enable /failure:enable
 auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
 
 # Verify
-auditpol /get /category:"Logon/Logoff"
-auditpol /get /category:"Account Logon"
+auditpol /get /category:"Logon/Logoff"  # On Terminal Server
+auditpol /get /category:"Account Logon"  # On Domain Controller
 ```
 
 **Or via Local Security Policy:**

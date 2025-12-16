@@ -91,32 +91,45 @@ The main forensics analysis cmdlet (Get-RDPForensics) collects and analyzes RDP 
 - PowerShell 5.1 or later
 - **Windows Audit Policies enabled** (see below)
 
+**Event Logging Locations (IMPORTANT):**
+
+| Event Type | Event IDs | Logged On | Tool Scope |
+|------------|-----------|-----------|------------|
+| **RDP Sessions** | 1149, 21-25, 39, 40, 4624, 4778, 4779 | Terminal Server | ✅ Primary use case |
+| **Kerberos Auth** | 4768-4772 | **Domain Controller** | ⚠️ DC only |
+| **NTLM Auth** | 4776 | **Domain Controller** | ⚠️ DC only |
+
+⚠️ **Key Limitation:** This tool queries the **local Security log** where it runs. Kerberos and NTLM authentication events (4768-4772, 4776) are logged on the Domain Controller, not the Terminal Server. The `-IncludeCredentialValidation` parameter will return ZERO events when running on a Terminal Server.
+
 **Audit Policy Requirements:**
 
 Most RDP events (1149, 21-25, 39, 40, 9009) are logged by default in Terminal Services Operational logs. However, **Security log events require specific audit policies** to be enabled:
 
-**Events requiring audit policies:**
+**Events requiring audit policies (ON TERMINAL SERVER):**
 - EventID 4624, 4625 (Logon/Failed Logon) - Requires "Audit Logon Events"
 - EventID 4634, 4647 (Logoff) - Requires "Audit Logon Events"
 - EventID 4778, 4779 (Session Reconnect/Disconnect) - Requires "Audit Other Logon/Logoff Events"
 - EventID 4800, 4801 (Workstation Lock/Unlock) - Requires "Audit Other Logon/Logoff Events"
-- **EventID 4768-4772 (Kerberos) - Requires "Audit Kerberos Authentication Service" (optional)**
-- **EventID 4776 (NTLM) - Requires "Audit Credential Validation" (optional)**
+
+**Events requiring audit policies (ON DOMAIN CONTROLLER):**
+- **EventID 4768-4772 (Kerberos) - Requires "Audit Kerberos Authentication Service" (optional, DC only)**
+- **EventID 4776 (NTLM) - Requires "Audit Credential Validation" (optional, DC only)**
 
 **Enable via PowerShell (recommended):**
 ```powershell
-# Enable required logon auditing
+# Run on Terminal Server - Required for RDP session tracking
 auditpol /set /subcategory:"Logon" /success:enable /failure:enable
 auditpol /set /subcategory:"Logoff" /success:enable
 auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
 
-# OPTIONAL: Enable pre-authentication tracking (for -IncludeCredentialValidation)
+# Run on Domain Controller - Optional for Kerberos/NTLM authentication tracking
+# ⚠️ WARNING: Only run this on DC, not on Terminal Servers
 auditpol /set /subcategory:"Kerberos Authentication Service" /success:enable /failure:enable
 auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
 
 # Verify settings
-auditpol /get /category:"Logon/Logoff"
-auditpol /get /category:"Account Logon"
+auditpol /get /category:"Logon/Logoff"  # Check on Terminal Server
+auditpol /get /category:"Account Logon"  # Check on Domain Controller
 ```
 
 **Enable via Group Policy (for domain environments):**
@@ -193,7 +206,8 @@ Get-RDPForensics -GroupBySession
 Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports\RDP"
 
 # **NEW v1.0.6** - Include Kerberos (4768-4772) and NTLM (4776) authentication events
-# Shows complete auth story: Kerberos attempts, failures (4771), NTLM fallback
+# ⚠️ NOTE: These events are on Domain Controller, not Terminal Server
+# Only shows events when running tool on DC
 Get-RDPForensics -IncludeCredentialValidation -GroupBySession
 
 # Include outbound RDP connections
@@ -237,7 +251,7 @@ Get-RDPForensics -Username "admin" -GroupBySession -StartDate (Get-Date).AddMont
 - **Duration Calculation** - Accurate session time from first event to last
 - **Anomaly Detection** - Identifies incomplete sessions (e.g., logon without logoff)
 - **Dual Export** - Saves both raw events AND session summaries to CSV
-- **Optional Pre-Authentication Events (NEW v1.0.6)** - Include EventIDs 4768-4772 (Kerberos: TGT, service tickets, failures) and 4776 (NTLM fallback) with time-based correlation. Shows complete authentication protocol flow and why Kerberos failed if NTLM was used
+- **Optional Pre-Authentication Events (NEW v1.0.6)** - Include EventIDs 4768-4772 (Kerberos: TGT, service tickets, failures) and 4776 (NTLM fallback) with time-based correlation. **⚠️ Only available when running on Domain Controller** - these events are not logged on Terminal Servers
 
 **Advanced Forensic Filtering Examples:**
 

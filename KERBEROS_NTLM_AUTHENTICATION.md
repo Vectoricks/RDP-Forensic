@@ -138,8 +138,20 @@ When a user attempts to connect via RDP, Windows first tries **Kerberos authenti
 ### Basic Authentication Tracking
 ```powershell
 # Include Kerberos and NTLM events in analysis
+# ⚠️ NOTE: Will only find events if running on Domain Controller
+# Running on Terminal Server will show NO Kerberos/NTLM events
 Get-RDPForensics -IncludeCredentialValidation -GroupBySession
 ```
+
+⚠️ **Expected Result on Terminal Server:**
+- Kerberos event count: 0 (events are on DC, not Terminal Server)
+- NTLM event count: 0 (events are on DC, not Terminal Server)  
+- RDP session events: Normal (events are local)
+
+✅ **Expected Result on Domain Controller:**
+- Kerberos event count: High (all domain Kerberos authentications)
+- NTLM event count: High (all NTLM authentications)
+- RDP session events: Only if DC is also an RDP target
 
 ### Find Kerberos Failures
 ```powershell
@@ -200,34 +212,88 @@ if ($stats.NTLM -gt $stats.KerberosService) {
 }
 ```
 
-## Time-Based Correlation
+## Correlation Strategy
 
-Pre-authentication events (4768-4772, 4776) occur **0-10 seconds before** the actual RDP session (EventID 4624). The toolkit automatically correlates these events based on:
+The toolkit uses **two different correlation methods** depending on event location:
 
-1. **Username Match** - Event username matches session username
-2. **Time Proximity** - Event occurred 0-10 seconds before session start
-3. **ActivityID** (when available) - Links events at the Windows level
+### 1. ActivityID Correlation (Terminal Server Events)
+For events logged locally on the Terminal Server:
+- ✅ **EventIDs**: 1149, 4624, 21-25, 4778, 4779, 4634, 4647
+- ✅ **Method**: ActivityID (Windows native correlation)
+- ✅ **Accuracy**: Exact - all events share the same ActivityID
+- ✅ **Use Case**: Perfect for tracking RDP session lifecycle
+
+### 2. Time-Based Correlation (Domain Controller Events)  
+For pre-authentication events from the Domain Controller:
+- ⚠️ **EventIDs**: 4768-4772 (Kerberos), 4776 (NTLM)
+- ⚠️ **Method**: Username match + timestamp proximity (0-10 seconds before session)
+- ⚠️ **Accuracy**: Heuristic - best-effort matching
+- ⚠️ **Why**: These events have DC's ActivityID, which doesn't match TS's ActivityID
+
+**Correlation Rules:**
+1. Pre-auth events occur **0-10 seconds before** the RDP session (EventID 4624)
+2. Username must match exactly
+3. Closest timestamp match wins if multiple candidates
+
+⚠️ **CRITICAL LIMITATION: Where Events Are Logged**
+
+| Event Type | Event IDs | Logged On | Available When Running on TS? |
+|------------|-----------|-----------|-------------------------------|
+| **RDP Session** | 4624, 1149, 21-25, 4778, 4779 | Terminal Server | ✅ YES |
+| **Kerberos Auth** | 4768-4772 | **Domain Controller** | ❌ NO |
+| **NTLM Auth** | 4776 | **Domain Controller** | ❌ NO |
+
+**Why ActivityID Cannot Correlate Across Machines:**
+- ActivityID is **provider-specific** and **machine-local**
+- Kerberos events (4768-4772) are logged on the **Domain Controller** with DC's ActivityID
+- RDP session events (4624) are logged on the **Terminal Server** with TS's ActivityID
+- These ActivityIDs are **completely unrelated** - they come from different systems
+- **Time-based correlation (username + timestamp)** is the only viable method for cross-machine correlation
+
+**Use Cases:**
+
+✅ **PRIMARY USE CASE:** Running tool on Terminal Server to analyze RDP sessions
+- Excellent ActivityID correlation between 4624 → 4778 → 4634 (all on same machine)
+- Perfect for session lifecycle tracking
+- `-IncludeCredentialValidation` will return ZERO Kerberos/NTLM events (they're on DC)
+
+⚠️ **LIMITED USE CASE:** Running tool on Domain Controller
+- Will see authentication events (4768-4772, 4776) for ALL domain authentications
+- But will NOT see Terminal Server session events (21-25, 4778, 4779)
+- Different purpose (DC authentication monitoring, not RDP session tracking)
+
+🔧 **ADVANCED SCENARIO:** Multi-system correlation
+- Collect DC logs separately: `Get-RDPForensics -IncludeCredentialValidation` on DC
+- Collect TS logs separately: `Get-RDPForensics -GroupBySession` on Terminal Server
+- Correlate manually using username + timestamp matching
 
 ## Audit Policy Configuration
 
-To collect these events, you must enable the appropriate audit policies:
+⚠️ **CRITICAL:** These audit policies must be enabled on the **Domain Controller**, not the Terminal Server!
 
-### PowerShell (Quick Setup)
+Kerberos and NTLM authentication events are logged where authentication validation occurs:
+- **Kerberos (4768-4772)** → Logged on Domain Controller
+- **NTLM (4776)** → Logged on Domain Controller (or authenticating server)
+- **RDP Sessions (4624)** → Logged on Terminal Server
+
+### PowerShell (Run on Domain Controller)
 ```powershell
-# Enable Kerberos authentication tracking
+# Enable Kerberos authentication tracking (ON DOMAIN CONTROLLER)
 auditpol /set /subcategory:"Kerberos Authentication Service" /success:enable /failure:enable
 
-# Enable NTLM credential validation tracking
+# Enable NTLM credential validation tracking (ON DOMAIN CONTROLLER)
 auditpol /set /subcategory:"Credential Validation" /success:enable /failure:enable
 
 # Verify
 auditpol /get /category:"Account Logon"
 ```
 
-### Group Policy (Enterprise)
+### Group Policy (Enterprise - Apply to Domain Controllers)
 ```
 Computer Configuration → Policies → Windows Settings → Security Settings →
 Advanced Audit Policy Configuration → Audit Policies → Account Logon
+
+Apply to: Domain Controllers OU
 
 Enable:
 - Audit Kerberos Authentication Service (Success, Failure)

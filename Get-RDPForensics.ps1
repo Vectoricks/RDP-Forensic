@@ -45,13 +45,22 @@ function Get-RDPForensics {
     - EventID 4768-4772 (Kerberos authentication: TGT, service tickets, failures)
     - EventID 4776 (NTLM Credential Validation - used when Kerberos fails/unavailable)
     
+    ⚠️ IMPORTANT: These events are logged on the DOMAIN CONTROLLER, not the Terminal Server.
+    When running this tool on a Terminal Server, these events will be EMPTY (count: 0).
+    Only use this parameter when:
+    - Running on a Domain Controller to analyze authentication patterns
+    - Analyzing logs exported from a Domain Controller
+    
     Shows complete authentication story:
     - Kerberos attempts (4768 TGT request, 4769 service ticket)
     - Kerberos failures (4771 pre-auth failed) that trigger NTLM fallback
     - NTLM authentication (4776) when Kerberos unavailable or fails
     
-    Uses time-based correlation (username + timestamp proximity) to associate with sessions.
-    Valuable for security analysis, tracking authentication methods, and identifying attack patterns.
+    Correlation Strategy:
+    - Pre-authentication events (4768-4772, 4776) use username + timestamp matching
+    - Terminal Server events (4624, 4778, etc.) use ActivityID correlation
+    - ActivityID cannot correlate across machines (DC vs Terminal Server)
+    - All pre-auth events matched within 0-10 second window before session start
 
 .EXAMPLE
     Get-RDPForensics
@@ -76,7 +85,7 @@ function Get-RDPForensics {
 .EXAMPLE
     Get-RDPForensics -IncludeCredentialValidation -GroupBySession
     Include Kerberos (4768-4772) and NTLM (4776) authentication events with time-based correlation.
-    Shows whether Kerberos or NTLM was used, and why Kerberos failed if NTLM fallback occurred.
+    ⚠️ NOTE: Only works when running on Domain Controller. Will return 0 events on Terminal Server.
 
 .NOTES
     Author: Jan Tiedemann
@@ -236,22 +245,26 @@ function Get-RDPForensics {
             }
         }
         
-        # Time-based correlation for 4776 events (credential validation happens before session creation)
-        # Match 4776 events to sessions within 10 seconds before session start with matching username
-        $uncorrelated4776 = $Events | Where-Object { $_.EventID -eq 4776 -and -not $_.CorrelationKey }
+        # Time-based correlation for pre-authentication events (4768-4772, 4776)
+        # These events are logged on DC with different ActivityID than TS events
+        # Match pre-auth events to sessions within 10 seconds before session start with matching username
+        $preAuthEvents = $Events | Where-Object { 
+            $_.EventID -in 4768, 4769, 4770, 4771, 4772, 4776 -and 
+            -not $_.CorrelationKey 
+        }
         
-        foreach ($credEvent in $uncorrelated4776) {
+        foreach ($preAuthEvent in $preAuthEvents) {
             $matchedSession = $null
             $closestTimeDiff = [TimeSpan]::MaxValue
             
-            # Find the closest session that starts within 10 seconds after this 4776 event with same user
+            # Find the closest session that starts within 10 seconds after this pre-auth event with same user
             foreach ($sessionKey in $sessionMap.Keys) {
                 $session = $sessionMap[$sessionKey]
-                if ($session.User -eq $credEvent.User) {
+                if ($session.User -eq $preAuthEvent.User) {
                     $sessionStart = ($session.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
-                    $timeDiff = $sessionStart - $credEvent.TimeCreated
+                    $timeDiff = $sessionStart - $preAuthEvent.TimeCreated
                     
-                    # 4776 should be 0-10 seconds BEFORE session start
+                    # Pre-auth events should be 0-10 seconds BEFORE session start
                     if ($timeDiff.TotalSeconds -ge 0 -and $timeDiff.TotalSeconds -le 10) {
                         if ($timeDiff -lt $closestTimeDiff) {
                             $closestTimeDiff = $timeDiff
@@ -261,9 +274,9 @@ function Get-RDPForensics {
                 }
             }
             
-            # Add 4776 event to matched session
+            # Add pre-auth event to matched session
             if ($matchedSession) {
-                $sessionMap[$matchedSession].Events += $credEvent
+                $sessionMap[$matchedSession].Events += $preAuthEvent
                 $sessionMap[$matchedSession].Lifecycle.Authentication = $true
             }
         }
