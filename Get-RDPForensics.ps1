@@ -317,28 +317,18 @@ function Get-RDPForensics {
             foreach ($logonIDKey in $logonIDSessions) {
                 $logonIDSession = $sessionMap[$logonIDKey]
                 
-                Write-Host "    Checking $logonIDKey (User: '$($logonIDSession.User)')" -ForegroundColor DarkGray
-                
                 # Match criteria: Same user + Time proximity (within ±10 seconds) + RDP LogonType
                 if ($logonIDSession.User -eq $sessionIDSession.User) {
                     $logonIDStart = ($logonIDSession.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
                     $timeDiff = [Math]::Abs(($logonIDStart - $sessionIDStart).TotalSeconds)
                     
-                    Write-Host "      Users match! TimeDiff: $([Math]::Round($timeDiff, 2))s" -ForegroundColor DarkGray
-                    
                     # Check if this is an RDP session (LogonType 10, 7, or 3)
-                    $has4624 = @($logonIDSession.Events | Where-Object { $_.EventID -eq 4624 })
-                    Write-Host "      Has 4624 events: $($has4624.Count)" -ForegroundColor DarkGray
-                    
                     $hasRDPLogonType = $logonIDSession.Events | Where-Object { 
                         $_.EventID -eq 4624 -and 
                         $_.Details -match 'RemoteInteractive|Unlock/Reconnect|Network' 
                     }
                     
-                    Write-Host "      Has RDP LogonType: $($hasRDPLogonType.Count)" -ForegroundColor DarkGray
-                    
                     if ($timeDiff -le 10 -and $hasRDPLogonType) {
-                        Write-Host "      ✓ MATCH FOUND! (TimeDiff: $([Math]::Round($timeDiff, 2))s)" -ForegroundColor Green
                         if ($timeDiff -lt $closestTimeDiff) {
                             $closestTimeDiff = $timeDiff
                             $matchedLogonIDKey = $logonIDKey
@@ -498,9 +488,6 @@ function Get-RDPForensics {
             [DateTime]$End,
             [bool]$IncludeKerberosAndNTLM = $false
         )
-        
-        # Initialize debug counter
-        $script:debugLogonIDCount = 0
     
         $eventList = if ($IncludeKerberosAndNTLM) { "4624, 4625, 4768-4772, 4776" } else { "4624, 4625" }
         Write-Host "$(Get-Emoji 'key') [2/7] Collecting RDP Authentication Events (EventID $eventList)..." -ForegroundColor Yellow
@@ -748,13 +735,6 @@ function Get-RDPForensics {
                             $sourceIP = if ($message -match 'Source Network Address:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $logonType = if ($message -match 'Logon Type:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $logonID = if ($message -match 'New Logon:[\s\S]*?Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                            
-                            # DEBUG: Show extracted values for first few events
-                            if ($script:debugLogonIDCount -lt 5) {
-                                Write-Host "    DEBUG 4624: LogonID='$logonID' User='$userName' LogonType='$logonType'" -ForegroundColor DarkYellow
-                                $script:debugLogonIDCount++
-                            }
-                            
                             $workstation = if ($message -match 'Workstation Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                         
                             $logonTypeDesc = switch ($logonType) {
