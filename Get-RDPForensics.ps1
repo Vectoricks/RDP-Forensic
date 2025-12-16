@@ -306,17 +306,13 @@ function Get-RDPForensics {
         $sessionIDSessions = @($sessionMap.Keys | Where-Object { $_ -like "SessionID:*" })
         $logonIDSessions = @($sessionMap.Keys | Where-Object { $_ -like "LogonID:*" })
         
-        Write-Host "$(Get-Emoji 'magnify') DEBUG: SessionID sessions: $($sessionIDSessions.Count), LogonID sessions: $($logonIDSessions.Count)" -ForegroundColor DarkYellow
-        
         foreach ($sessionIDKey in $sessionIDSessions) {
             $sessionIDSession = $sessionMap[$sessionIDKey]
             $sessionIDStart = ($sessionIDSession.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
             
-            Write-Host "  Trying to match $sessionIDKey (User: '$($sessionIDSession.User)')" -ForegroundColor DarkGray
-            
             # Find matching LogonID session
             $matchedLogonIDKey = $null
-            $closestTimeDiff = [TimeSpan]::MaxValue
+            $closestTimeDiff = [double]::MaxValue  # Use double instead of TimeSpan for comparison with seconds
             
             foreach ($logonIDKey in $logonIDSessions) {
                 $logonIDSession = $sessionMap[$logonIDKey]
@@ -744,7 +740,8 @@ function Get-RDPForensics {
                             # Construct full username as DOMAIN\User to match TerminalServices event format
                             if ($userDomain -ne 'N/A' -and $userDomain -ne '-' -and $accountName -ne 'N/A') {
                                 $userName = "$userDomain\$accountName"
-                            } else {
+                            }
+                            else {
                                 $userName = $accountName
                             }
                             
