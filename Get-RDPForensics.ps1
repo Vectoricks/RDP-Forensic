@@ -9,10 +9,11 @@ function Get-RDPForensics {
     This script collects and analyzes RDP connection logs from various Windows Event Logs
     following forensic best practices. It tracks all stages of RDP connections:
     1. Network Connection (EventID 1149)
-    2. Authentication (EventID 4624, 4625)
-    3. Logon (EventID 21, 22)
-    4. Session Disconnect/Reconnect (EventID 24, 25, 39, 40, 4778, 4779)
-    5. Logoff (EventID 23, 4634, 4647, 9009)
+    2. Credential Validation (EventID 4776)
+    3. Authentication (EventID 4624, 4625)
+    4. Logon (EventID 21, 22)
+    5. Session Disconnect/Reconnect (EventID 24, 25, 39, 40, 4778, 4779)
+    6. Logoff (EventID 23, 4634, 4647, 9009)
 
 .PARAMETER StartDate
     The start date for log collection. Defaults to beginning of current day.
@@ -60,7 +61,7 @@ function Get-RDPForensics {
 
 .NOTES
     Author: Jan Tiedemann
-    Version: 1.0.5
+    Version: 1.0.6
     Based on: https://woshub.com/rdp-connection-logs-forensics-windows/
     Requires: Administrator privileges to read Security event logs
 #>
@@ -196,7 +197,7 @@ function Get-RDPForensics {
                 # Track lifecycle stages
                 switch ($event.EventID) {
                     1149 { $sessionMap[$correlationKey].Lifecycle.ConnectionAttempt = $true }
-                    4624 { $sessionMap[$correlationKey].Lifecycle.Authentication = $true }
+                    { $_ -in 4624, 4776 } { $sessionMap[$correlationKey].Lifecycle.Authentication = $true }
                     { $_ -in 21, 22 } { $sessionMap[$correlationKey].Lifecycle.Logon = $true }
                     { $_ -in 24, 25, 4778 } { $sessionMap[$correlationKey].Lifecycle.Active = $true }
                     { $_ -in 39, 40, 4779 } { $sessionMap[$correlationKey].Lifecycle.Disconnect = $true }
@@ -266,7 +267,7 @@ function Get-RDPForensics {
     $horizontal = [string][char]0x2550; $vertical = [char]0x2551
     Write-Host "$topLeft$($horizontal * 67)$topRight" -ForegroundColor Cyan
     Write-Host "$vertical" -ForegroundColor Cyan -NoNewline
-    Write-Host "          RDP FORENSICS ANALYSIS TOOL v1.0.5                       " -ForegroundColor White -NoNewline
+    Write-Host "          RDP FORENSICS ANALYSIS TOOL v1.0.6                       " -ForegroundColor White -NoNewline
     Write-Host "$vertical" -ForegroundColor Cyan
     Write-Host "$vertical" -ForegroundColor Cyan -NoNewline
     Write-Host "        Security Investigation & Audit Toolkit                     " -ForegroundColor Yellow -NoNewline
@@ -334,14 +335,15 @@ function Get-RDPForensics {
         }
     }
 
-    # Function to parse EventID 4624, 4625 - Authentication Events
+    # Function to parse EventID 4624, 4625, 4776 - Authentication Events
     function Get-RDPAuthenticationEvents {
         param([DateTime]$Start, [DateTime]$End)
     
-        Write-Host "$(Get-Emoji 'key') [2/6] Collecting RDP Authentication Events (EventID 4624, 4625)..." -ForegroundColor Yellow
+        Write-Host "$(Get-Emoji 'key') [2/6] Collecting RDP Authentication Events (EventID 4624, 4625, 4776)..." -ForegroundColor Yellow
     
         try {
-            $events = Get-WinEvent -FilterHashtable @{
+            # Collect logon events (4624/4625) and credential validation events (4776)
+            $logonEvents = Get-WinEvent -FilterHashtable @{
                 LogName   = 'Security'
                 Id        = 4624, 4625
                 StartTime = $Start
@@ -350,8 +352,19 @@ function Get-RDPForensics {
                 # Filter for RDP LogonTypes: 10 (RemoteInteractive), 7 (Unlock/Reconnect), 3 (Network-can be RDP), 5 (Service/Console)
                 $_.Message -match 'Logon Type:\s+(10|7|3|5)\s'
             }
+            
+            # Collect NTLM credential validation events (4776)
+            $credentialEvents = Get-WinEvent -FilterHashtable @{
+                LogName   = 'Security'
+                Id        = 4776
+                StartTime = $Start
+                EndTime   = $End
+            } -ErrorAction SilentlyContinue
+            
+            # Combine both event types
+            $events = @($logonEvents) + @($credentialEvents)
         
-            if ($events) {
+            if ($events -and $events.Count -gt 0) {
                 $results = foreach ($event in $events) {
                     $message = $event.Message
                 
@@ -363,40 +376,66 @@ function Get-RDPForensics {
                         $null 
                     }
                 
-                    # Parse message using regex
-                    $userName = if ($message -match '\s\sAccount Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                    $userDomain = if ($message -match '\s\sAccount Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                    $sourceIP = if ($message -match 'Source Network Address:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                    $logonType = if ($message -match 'Logon Type:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                    $logonID = if ($message -match 'Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                    $workstation = if ($message -match 'Workstation Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
-                
-                    $logonTypeDesc = switch ($logonType) {
-                        '2' { 'Interactive (Local)' }
-                        '3' { 'Network' }
-                        '4' { 'Batch' }
-                        '5' { 'Service/Console' }
-                        '7' { 'Unlock/Reconnect' }
-                        '8' { 'NetworkCleartext' }
-                        '9' { 'NewCredentials' }
-                        '10' { 'RemoteInteractive (RDP)' }
-                        '11' { 'CachedInteractive' }
-                        default { "Unknown ($logonType)" }
+                    # Handle different event types
+                    if ($event.Id -eq 4776) {
+                        # Credential Validation (NTLM)
+                        $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $userDomain = if ($message -match 'Source Workstation:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $errorCode = if ($message -match 'Error Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $authPackage = if ($message -match 'Authentication Package:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'NTLM' }
+                        
+                        $eventType = if ($errorCode -eq '0x0') { 'Credential Validation Success' } else { 'Credential Validation Failed' }
+                        $details = "$authPackage | Error Code: $errorCode | Source: $userDomain"
+                        
+                        [PSCustomObject]@{
+                            TimeCreated = $event.TimeCreated
+                            EventID     = $event.Id
+                            EventType   = $eventType
+                            User        = $userName
+                            Domain      = 'N/A'
+                            SourceIP    = 'N/A'
+                            SessionID   = $null
+                            LogonID     = $null
+                            ActivityID  = $activityID
+                            Details     = $details
+                        }
                     }
-                
-                    $eventType = if ($event.Id -eq 4624) { 'Successful Logon' } else { 'Failed Logon' }
-                
-                    [PSCustomObject]@{
-                        TimeCreated = $event.TimeCreated
-                        EventID     = $event.Id
-                        EventType   = $eventType
-                        User        = $userName
-                        Domain      = $userDomain
-                        SourceIP    = $sourceIP
-                        SessionID   = $null
-                        LogonID     = $logonID
-                        ActivityID  = $activityID
-                        Details     = "$logonTypeDesc | Workstation: $workstation"
+                    else {
+                        # Logon/Failed Logon (4624/4625)
+                        $userName = if ($message -match '\s\sAccount Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $userDomain = if ($message -match '\s\sAccount Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $sourceIP = if ($message -match 'Source Network Address:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $logonType = if ($message -match 'Logon Type:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $logonID = if ($message -match 'Logon ID:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                        $workstation = if ($message -match 'Workstation Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
+                    
+                        $logonTypeDesc = switch ($logonType) {
+                            '2' { 'Interactive (Local)' }
+                            '3' { 'Network' }
+                            '4' { 'Batch' }
+                            '5' { 'Service/Console' }
+                            '7' { 'Unlock/Reconnect' }
+                            '8' { 'NetworkCleartext' }
+                            '9' { 'NewCredentials' }
+                            '10' { 'RemoteInteractive (RDP)' }
+                            '11' { 'CachedInteractive' }
+                            default { "Unknown ($logonType)" }
+                        }
+                    
+                        $eventType = if ($event.Id -eq 4624) { 'Successful Logon' } else { 'Failed Logon' }
+                    
+                        [PSCustomObject]@{
+                            TimeCreated = $event.TimeCreated
+                            EventID     = $event.Id
+                            EventType   = $eventType
+                            User        = $userName
+                            Domain      = $userDomain
+                            SourceIP    = $sourceIP
+                            SessionID   = $null
+                            LogonID     = $logonID
+                            ActivityID  = $activityID
+                            Details     = "$logonTypeDesc | Workstation: $workstation"
+                        }
                     }
                 }
             
