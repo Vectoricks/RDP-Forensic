@@ -463,8 +463,8 @@ function Get-RDPForensics {
                             $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
-                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
-                                       else { 'N/A' }
+                            elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                            else { 'N/A' }
                             $statusCode = if ($message -match 'Result Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $ticketOptions = if ($message -match 'Ticket Options:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             
@@ -490,8 +490,8 @@ function Get-RDPForensics {
                             $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $serviceName = if ($message -match 'Service Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
-                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
-                                       else { 'N/A' }
+                            elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                            else { 'N/A' }
                             $statusCode = if ($message -match 'Failure Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { '0x0' }
                             
                             $eventType = if ($statusCode -eq '0x0') { 'Kerberos Service Ticket Success' } else { 'Kerberos Service Ticket Failed' }
@@ -516,8 +516,8 @@ function Get-RDPForensics {
                             $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $serviceName = if ($message -match 'Service Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
-                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
-                                       else { 'N/A' }
+                            elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                            else { 'N/A' }
                             
                             $eventType = 'Kerberos Ticket Renewed'
                             $details = "Service: $serviceName"
@@ -539,11 +539,11 @@ function Get-RDPForensics {
                             # Kerberos Pre-authentication Failed (KEY EVENT - shows why Kerberos failed)
                             $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $userDomain = if ($message -match 'Service Name:\s+krbtgt/([^\r\n]+)') { $matches[1].Trim() } 
-                                         elseif ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } 
-                                         else { 'N/A' }
+                            elseif ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                            else { 'N/A' }
                             $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
-                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
-                                       else { 'N/A' }
+                            elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                            else { 'N/A' }
                             $errorCode = if ($message -match 'Failure Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             
                             # Common Kerberos error codes
@@ -579,8 +579,8 @@ function Get-RDPForensics {
                             $userName = if ($message -match 'Account Name:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $userDomain = if ($message -match 'Account Domain:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $sourceIP = if ($message -match 'Client Address:\s+::ffff:([^\r\n]+)') { $matches[1].Trim() } 
-                                       elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
-                                       else { 'N/A' }
+                            elseif ($message -match 'Client Address:\s+([^\r\n]+)') { $matches[1].Trim() } 
+                            else { 'N/A' }
                             $errorCode = if ($message -match 'Failure Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             
                             $eventType = 'Kerberos Ticket Request Failed'
@@ -605,8 +605,8 @@ function Get-RDPForensics {
                             $logonAccount = if ($message -match 'Logon Account:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             # Extract just the username if domain\username format
                             $userName = if ($logonAccount -match '\\(.+)$') { $matches[1] } 
-                                       elseif ($logonAccount -ne 'N/A') { $logonAccount } 
-                                       else { 'N/A' }
+                            elseif ($logonAccount -ne 'N/A') { $logonAccount } 
+                            else { 'N/A' }
                             $userDomain = if ($message -match 'Source Workstation:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $errorCode = if ($message -match 'Error Code:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'N/A' }
                             $authPackage = if ($message -match 'Authentication Package:\s+([^\r\n]+)') { $matches[1].Trim() } else { 'NTLM' }
