@@ -308,6 +308,140 @@ Get-RDPForensics -SourceIP "203.0.113.45" -StartDate (Get-Date).AddMonths(-3) |
 | `Username` | String | Filter by specific username | None |
 | `SourceIP` | String | Filter by source IP address | None |
 | `IncludeOutbound` | Switch | Include outbound RDP connections | False |
+| `GroupBySession` | Switch | Correlate events by LogonID/SessionID | False |
+| `LogonID` | String | Filter by specific LogonID (hex format: 0x12345) | None |
+| `SessionID` | Int | Filter by specific SessionID | None |
+| `IncludeCredentialValidation` | Switch | Include Kerberos/NTLM events (DC only) | False |
+
+## 🎯 Forensic Analysis Best Practices
+
+### Understanding LogonID vs SessionID Filtering
+
+When investigating RDP sessions, understanding the difference between **LogonID** and **SessionID** filtering is crucial for comprehensive forensic analysis:
+
+#### **LogonID Filtering (Recommended for Complete Investigation)**
+
+**Use `-LogonID` when you need:**
+- ✅ **Complete session correlation** across all log sources
+- ✅ **Security log events** (4624 auth, 4778/4779 reconnect/disconnect)
+- ✅ **TerminalServices events** (21-25 session lifecycle)
+- ✅ **Full forensic picture** including authentication and reconnection history
+- ✅ **Cross-log correlation** (Security + TerminalServices-LocalSessionManager)
+
+**Example:**
+```powershell
+# Get complete session with all Security and TerminalServices events
+Get-RDPForensics -GroupBySession -Username administrator -LogonID 0x6950A4
+```
+
+**Output includes:**
+- 4778/4779 reconnect/disconnect events from Security log
+- 4624 authentication events
+- Event 21-25 session events from TerminalServices
+- Complete session timeline with all state changes
+- Multiple reconnect/disconnect cycles
+
+**Why LogonID is Priority 1:**
+- **Consistent across logs** - Same LogonID appears in both Security and TerminalServices logs
+- **Created at authentication** - Assigned when user authenticates (4624 event)
+- **Persists through session** - Remains constant even through reconnects/disconnects
+- **Hex format** - Unique identifier (e.g., 0x6950A4)
+
+#### **SessionID Filtering (Limited Use Cases)**
+
+**Use `-SessionID` only when:**
+- ⚠️ You need to isolate **TerminalServices-only** events
+- ⚠️ You're investigating **specific session IDs** from TerminalServices logs
+- ⚠️ You want to see **partial session view** without Security log context
+
+**Example:**
+```powershell
+# Get only TerminalServices events for SessionID 4
+Get-RDPForensics -GroupBySession -Username administrator -SessionID 4
+```
+
+**Output limited to:**
+- Event 21: Session Logon Succeeded
+- Event 22: Shell Start Notification
+- Event 23: Session Logoff Succeeded
+- Event 24: Session Disconnected
+- **Missing:** 4624 auth events, 4778/4779 reconnect events from Security log
+
+**Why SessionID is Limited:**
+- **TerminalServices-only** - Not present in Security log events
+- **Missing authentication context** - No 4624 events to show how user authenticated
+- **No reconnect history** - Missing 4778/4779 events from Security log
+- **Partial timeline** - Only shows TerminalServices perspective
+
+### Recommended Forensic Workflow
+
+**1. Start with broad correlation (no filters):**
+```powershell
+# Get all sessions for investigation period
+Get-RDPForensics -GroupBySession -StartDate (Get-Date).AddDays(-7) -Username targetuser
+```
+
+**2. Identify sessions of interest:**
+- Review session summary table
+- Note LogonID values (e.g., "LogonID:0x6950A4")
+- Check session duration and lifecycle completeness
+
+**3. Deep dive with LogonID filter:**
+```powershell
+# Get complete forensic picture for specific session
+Get-RDPForensics -GroupBySession -LogonID 0x6950A4 -Username targetuser
+```
+
+**4. Export for further analysis:**
+```powershell
+# Export complete session with all correlated events
+Get-RDPForensics -GroupBySession -LogonID 0x6950A4 -ExportPath "C:\Forensics\Investigation"
+```
+
+### Why LogonID-Based Correlation is Superior
+
+| Aspect | LogonID Correlation | SessionID Correlation |
+|--------|---------------------|----------------------|
+| **Log Coverage** | Security + TerminalServices | TerminalServices only |
+| **Event Types** | 4624, 4778/4779, 21-25 | 21-25 only |
+| **Authentication Context** | ✅ Yes (4624 events) | ❌ No |
+| **Reconnect History** | ✅ Yes (4778/4779) | ❌ No |
+| **Session Duration** | ✅ Accurate (full timeline) | ⚠️ Partial (TS events only) |
+| **Forensic Value** | ✅ Complete investigation | ⚠️ Limited view |
+| **Best For** | Security investigations | TS log troubleshooting |
+
+### Example: Investigating Suspicious Long Session
+
+```powershell
+# Step 1: Find long-running sessions
+$sessions = Get-RDPForensics -GroupBySession -StartDate (Get-Date).AddDays(-1)
+$longSessions = $sessions | Where-Object { 
+    $_.Duration -and [timespan]::Parse($_.Duration).TotalHours -gt 8 
+}
+
+# Step 2: Identify LogonID for suspicious session
+$suspiciousLogonID = $longSessions[0].LogonID  # e.g., "0x6950A4"
+
+# Step 3: Get complete session details with LogonID filter
+Get-RDPForensics -GroupBySession -LogonID $suspiciousLogonID -ExportPath "C:\Investigation"
+```
+
+**This approach gives you:**
+- Initial authentication event (4624) with logon type
+- All reconnect/disconnect cycles (4778/4779)
+- Complete TerminalServices session events (21-25)
+- Full timeline showing exactly when and how session was active
+- Evidence of disconnects vs logoffs
+
+### Quick Reference
+
+| Investigation Goal | Recommended Command |
+|-------------------|---------------------|
+| **Complete session analysis** | `-GroupBySession -LogonID 0x12345` |
+| **Find all user sessions** | `-GroupBySession -Username john.doe` |
+| **TerminalServices log only** | `-GroupBySession -SessionID 4` |
+| **Broad investigation** | `-GroupBySession -StartDate (date)` |
+| **Export for forensics** | Add `-ExportPath "C:\path"` to any command |
 
 ### Get-CurrentRDPSessions.ps1
 
