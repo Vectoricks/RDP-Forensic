@@ -293,7 +293,7 @@ function Get-CurrentRDPSessions {
         $logFile = Join-Path $LogPath "RDP_SessionMonitor_$timestamp.csv"
         
         # Write CSV header with extended properties
-        "Timestamp,EventType,SessionName,Username,SessionID,State,ClientIP,ClientName,ClientBuild,IdleTime,Details" | Out-File -FilePath $logFile -Encoding UTF8
+        "Timestamp,EventType,SessionName,Username,SessionID,State,ClientIP,ClientName,ConnectTime,ClientBuild,IdleTime,Details" | Out-File -FilePath $logFile -Encoding UTF8
         
         Write-Host "$(Get-Emoji 'chart') Logging enabled: " -ForegroundColor Cyan -NoNewline
         Write-Host "$logFile" -ForegroundColor Green
@@ -415,13 +415,15 @@ function Get-CurrentRDPSessions {
                     # Check for new sessions or state changes
                     if (-not $previousSessions.ContainsKey($key)) {
                         # New session detected
-                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),NEW_SESSION,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$($session.ClientBuild),$($session.IdleTime),New RDP session detected"
+                        $connectTimeStr = if ($session.ConnectTime) { $session.ConnectTime.ToString('yyyy-MM-dd HH:mm:ss') } else { 'N/A' }
+                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),NEW_SESSION,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$connectTimeStr,$($session.ClientBuild),$($session.IdleTime),New RDP session detected"
                         $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
                         Write-Host "  [LOG] New session: $($session.Username) from $($session.ClientIP) (ID: $($session.ID))" -ForegroundColor Green
                     }
                     elseif ($previousSessions[$key].State -ne $session.State) {
                         # State change detected
-                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),STATE_CHANGE,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$($session.ClientBuild),$($session.IdleTime),State changed from $($previousSessions[$key].State) to $($session.State)"
+                        $connectTimeStr = if ($session.ConnectTime) { $session.ConnectTime.ToString('yyyy-MM-dd HH:mm:ss') } else { 'N/A' }
+                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),STATE_CHANGE,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$connectTimeStr,$($session.ClientBuild),$($session.IdleTime),State changed from $($previousSessions[$key].State) to $($session.State)"
                         $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
                         Write-Host "  [LOG] State change: $($session.Username) - $($previousSessions[$key].State) -> $($session.State)" -ForegroundColor Yellow
                     }
@@ -431,7 +433,8 @@ function Get-CurrentRDPSessions {
                 foreach ($key in $previousSessions.Keys) {
                     if (-not $currentSessionKeys.ContainsKey($key)) {
                         $oldSession = $previousSessions[$key]
-                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),SESSION_ENDED,$($oldSession.SessionName),$($oldSession.Username),$($oldSession.ID),$($oldSession.State),$($oldSession.ClientIP),$($oldSession.ClientName),$($oldSession.ClientBuild),$($oldSession.IdleTime),Session ended or disconnected"
+                        $connectTimeStr = if ($oldSession.ConnectTime) { $oldSession.ConnectTime.ToString('yyyy-MM-dd HH:mm:ss') } else { 'N/A' }
+                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),SESSION_ENDED,$($oldSession.SessionName),$($oldSession.Username),$($oldSession.ID),$($oldSession.State),$($oldSession.ClientIP),$($oldSession.ClientName),$connectTimeStr,$($oldSession.ClientBuild),$($oldSession.IdleTime),Session ended or disconnected"
                         $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
                         Write-Host "  [LOG] Session ended: $($oldSession.Username) from $($oldSession.ClientIP) (ID: $($oldSession.ID))" -ForegroundColor Red
                     }
