@@ -249,6 +249,37 @@ Write-Host "`nReport saved to: $reportPath" -ForegroundColor Green
 #>
 
 # ============================================================================
+# SCENARIO 11: Real-Time Session Monitoring (Auto-Refresh)
+# ============================================================================
+<#
+Write-Host "SCENARIO 11: Real-Time Session Monitoring (Auto-Refresh)" -ForegroundColor Green
+Write-Host "Continuously monitor active RDP sessions with auto-refresh"
+Write-Host ""
+Write-Host "Use Case: Security incident response, maintenance windows, or live threat monitoring" -ForegroundColor Cyan
+Write-Host "Press Ctrl+C to exit monitoring mode" -ForegroundColor Yellow
+Write-Host ""
+
+# Option 1: Basic real-time monitoring with 5-second refresh (default)
+.\Get-CurrentRDPSessions.ps1 -Watch
+
+# Option 2: Fast monitoring during incident response (3-second refresh)
+# .\Get-CurrentRDPSessions.ps1 -Watch -RefreshInterval 3
+
+# Option 3: Detailed monitoring with processes shown (10-second refresh)
+# .\Get-CurrentRDPSessions.ps1 -Watch -ShowProcesses -RefreshInterval 10
+
+# Option 4: Slower monitoring for long-term observation (30-second refresh)
+# .\Get-CurrentRDPSessions.ps1 -Watch -RefreshInterval 30
+
+Write-Host "`nReal-time monitoring provides:" -ForegroundColor Yellow
+Write-Host "  - Automatic screen refresh at configured intervals" -ForegroundColor Gray
+Write-Host "  - Live session state tracking (Active/Disconnected)" -ForegroundColor Gray
+Write-Host "  - Immediate detection of new connections" -ForegroundColor Gray
+Write-Host "  - Continuous user activity monitoring" -ForegroundColor Gray
+Write-Host "  - Real-time logon information updates" -ForegroundColor Gray
+#>
+
+# ============================================================================
 # SCENARIO 10: Incident Response - Full Investigation
 # ============================================================================
 <#
@@ -303,4 +334,5 @@ Write-Host "  7. Session Duration Analysis" -ForegroundColor Gray
 Write-Host "  8. Monitor Current Sessions" -ForegroundColor Gray
 Write-Host "  9. Monthly Executive Report" -ForegroundColor Gray
 Write-Host " 10. Incident Response - Full Investigation" -ForegroundColor Gray
+Write-Host " 11. Real-Time Session Monitoring (Auto-Refresh)" -ForegroundColor Gray
 Write-Host ""
