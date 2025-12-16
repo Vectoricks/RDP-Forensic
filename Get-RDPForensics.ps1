@@ -711,11 +711,15 @@ function Get-RDPForensics {
             Write-Host "$(Get-Emoji 'key') CORRELATED RDP SESSIONS" -ForegroundColor Cyan
             Write-Host ($separator * 58) -ForegroundColor DarkCyan
             
+            # Box-drawing characters for PS 5.1 compatibility
+            $sessionSep = [string][char]0x2500  # Horizontal line
+            $arrow = [string][char]0x2192  # Right arrow
+            
             foreach ($session in $sessions | Select-Object -First 20) {
                 Write-Host "`n" -NoNewline
-                Write-Host "─── Session: " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$($sessionSep * 3) Session: " -ForegroundColor DarkGray -NoNewline
                 Write-Host "$($session.CorrelationKey)" -ForegroundColor White -NoNewline
-                Write-Host " ───" -ForegroundColor DarkGray
+                Write-Host " $($sessionSep * 3)" -ForegroundColor DarkGray
                 
                 Write-Host "  $(Get-Emoji 'user') User: " -ForegroundColor Cyan -NoNewline
                 Write-Host "$($session.User)" -ForegroundColor White -NoNewline
@@ -732,15 +736,15 @@ function Get-RDPForensics {
                 
                 Write-Host "  $(Get-Emoji 'chart') Lifecycle: " -ForegroundColor Cyan -NoNewline
                 if ($session.ConnectionAttempt) { Write-Host "Connect " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
-                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$arrow " -ForegroundColor DarkGray -NoNewline
                 if ($session.Authentication) { Write-Host "Auth " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
-                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$arrow " -ForegroundColor DarkGray -NoNewline
                 if ($session.Logon) { Write-Host "Logon " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
-                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$arrow " -ForegroundColor DarkGray -NoNewline
                 if ($session.Active) { Write-Host "Active " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
-                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$arrow " -ForegroundColor DarkGray -NoNewline
                 if ($session.Disconnect) { Write-Host "Disconnect " -ForegroundColor Yellow -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
-                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$arrow " -ForegroundColor DarkGray -NoNewline
                 if ($session.Logoff) { Write-Host "Logoff" -ForegroundColor Green } else { Write-Host "-" -ForegroundColor DarkGray }
                 
                 Write-Host "  $(Get-Emoji 'folder') Events: " -ForegroundColor Cyan -NoNewline
