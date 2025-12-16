@@ -88,6 +88,40 @@ The main forensics analysis cmdlet (Get-RDPForensics) collects and analyzes RDP 
 - Windows Server 2012 R2 or later / Windows 8.1 or later
 - Administrator privileges (required to read Security event logs)
 - PowerShell 5.1 or later
+- **Windows Audit Policies enabled** (see below)
+
+**Audit Policy Requirements:**
+
+Most RDP events (1149, 21-25, 39, 40, 9009) are logged by default in Terminal Services Operational logs. However, **Security log events require specific audit policies** to be enabled:
+
+**Events requiring audit policies:**
+- EventID 4624, 4625 (Logon/Failed Logon) - Requires "Audit Logon Events"
+- EventID 4634, 4647 (Logoff) - Requires "Audit Logon Events"
+- EventID 4778, 4779 (Session Reconnect/Disconnect) - Requires "Audit Other Logon/Logoff Events"
+
+**Enable via PowerShell (recommended):**
+```powershell
+# Enable logon auditing
+auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+auditpol /set /subcategory:"Logoff" /success:enable
+auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
+
+# Verify settings
+auditpol /get /category:"Logon/Logoff"
+```
+
+**Enable via Group Policy (for domain environments):**
+```
+Computer Configuration → Policies → Windows Settings → Security Settings →
+Advanced Audit Policy Configuration → Audit Policies → Logon/Logoff
+
+Enable:
+- Audit Logon (Success, Failure)
+- Audit Logoff (Success)
+- Audit Other Logon/Logoff Events (Success, Failure)
+```
+
+**Note:** Most Windows systems have logon auditing enabled by default. The tool will still work without these policies, but event correlation may be less complete (missing 4624/4634/4778/4779 events).
 
 **PowerShell 5.1 & 7.x Compatibility:**
 

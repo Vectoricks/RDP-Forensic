@@ -148,6 +148,41 @@ Perfect for:
 ✅ **PowerShell 5.1 or later** (Built into Windows)
 ✅ **Administrator privileges** (Required for Security log access)
 ✅ **Event logs enabled** (Default on Windows)
+✅ **Audit policies enabled** (See below)
+
+## Enable Windows Audit Policies
+
+⚠️ **Important:** Security log events (4624, 4634, 4778, 4779) require specific audit policies to be enabled. Terminal Services logs work by default.
+
+**Quick Enable via PowerShell:**
+```powershell
+# Enable logon auditing (run as Administrator)
+auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+auditpol /set /subcategory:"Logoff" /success:enable
+auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable /failure:enable
+
+# Verify
+auditpol /get /category:"Logon/Logoff"
+```
+
+**Or via Local Security Policy:**
+1. Run `secpol.msc`
+2. Navigate to: Security Settings → Local Policies → Audit Policy
+3. Enable:
+   - Audit Logon Events → Success, Failure
+   - Audit Account Logon Events → Success, Failure
+
+**For domain environments**, configure via Group Policy:
+```
+Computer Configuration → Policies → Windows Settings → 
+Security Settings → Advanced Audit Policy Configuration → 
+Audit Policies → Logon/Logoff
+```
+
+**Note:** Most systems already have these enabled. Check with:
+```powershell
+auditpol /get /subcategory:"Logon","Logoff","Other Logon/Logoff Events"
+```
 
 ## Verify Administrator Rights
 
