@@ -139,7 +139,7 @@ function Get-CurrentRDPSessions {
         $horizontal = [string][char]0x2550; $vertical = [char]0x2551
         Write-Host "$topLeft$($horizontal * 51)$topRight" -ForegroundColor Green
         Write-Host "$vertical" -ForegroundColor Green -NoNewline
-        Write-Host "     ACTIVE RDP SESSIONS MONITOR v1.0.3            " -ForegroundColor White -NoNewline
+        Write-Host "     ACTIVE RDP SESSIONS MONITOR v1.0.4            " -ForegroundColor White -NoNewline
         Write-Host "$vertical" -ForegroundColor Green
         Write-Host "$bottomLeft$($horizontal * 51)$bottomRight" -ForegroundColor Green
         Write-Host ""
