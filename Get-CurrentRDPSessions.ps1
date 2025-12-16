@@ -328,86 +328,56 @@ function Get-CurrentRDPSessions {
         }
         Write-Host ""
 
-        # Get current sessions using WTS API
+        # Get current sessions using qwinsta (reliable) + WTS API for extended properties
         try {
-            $sessionObjects = @()
-            $sessionInfoPtr = [IntPtr]::Zero
-            $sessionCount = 0
-            
-            # Enumerate all sessions
-            $result = [WTSApi]::WTSEnumerateSessions(
-                [WTSApi]::WTS_CURRENT_SERVER_HANDLE,
-                0,
-                1,
-                [ref]$sessionInfoPtr,
-                [ref]$sessionCount
-            )
-            
-            if ($result -and $sessionCount -gt 0) {
-                $sessionInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][WTS_SESSION_INFO])
+            $sessions = qwinsta 2>$null
+    
+            if ($sessions) {
+                # Parse qwinsta output
+                $sessionObjects = @()
+        
+                foreach ($line in $sessions | Select-Object -Skip 1) {
+                    if ($line -match '^\s*>?\s*(\S+)\s+(\S+|\s+)\s+(\d+)\s+(\S+)') {
+                        $sessionName = $matches[1].Trim()
+                        $username = $matches[2].Trim()
+                        $id = [int]$matches[3].Trim()
+                        $state = $matches[4].Trim()
                 
-                for ($i = 0; $i -lt $sessionCount; $i++) {
-                    $offset = [IntPtr]::Add($sessionInfoPtr, $i * $sessionInfoSize)
-                    $sessionInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($offset, [Type][WTS_SESSION_INFO])
-                    
-                    # Get session name using WTSQuerySessionInformation for proper string handling
-                    $sessionName = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSWinStationName)
-                    if (-not $sessionName) { $sessionName = "Unknown" }
-                    
-                    $state = $sessionInfo.State.ToString()
-                    
-                    # DEBUG: Show all sessions
-                    Write-Host "[DEBUG] Session: $sessionName | State: $state | ID: $($sessionInfo.SessionId)" -ForegroundColor Gray
-                    
-                    # Only include RDP sessions (exclude console, services, listeners)
-                    # Match case-insensitive: rdp-tcp or RDP-Tcp
-                    if ($sessionName -match '(?i)rdp-tcp#\d+' -and $state -ne 'WTSListen') {
-                        # Query extended session information
-                        $username = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSUserName)
-                        $clientName = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientName)
-                        $clientIP = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientAddress)
-                        $clientBuild = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientBuildNumber)
-                        $clientDisplay = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientDisplay)
-                        $idleTime = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSIdleTime)
-                        $connectTime = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSLogonTime)
-                        
-                        # Convert state to user-friendly format
-                        $stateDisplay = switch ($state) {
-                            'WTSActive' { 'Active' }
-                            'WTSDisconnected' { 'Disc' }
-                            'WTSConnected' { 'Conn' }
-                            'WTSIdle' { 'Idle' }
-                            default { $state -replace 'WTS', '' }
-                        }
-                        
-                        # Calculate idle time in readable format
-                        $idleTimeDisplay = if ($idleTime -ne $null -and $idleTime -ge 0) {
-                            $idleMinutes = [Math]::Floor($idleTime / 60000)
-                            if ($idleMinutes -lt 1) { "<1 min" }
-                            elseif ($idleMinutes -lt 60) { "$idleMinutes min" }
-                            else { "$([Math]::Floor($idleMinutes / 60))h $($idleMinutes % 60)m" }
-                        }
-                        else { "N/A" }
-                        
-                        $sessionObjects += [PSCustomObject]@{
-                            SessionName   = $sessionName
-                            Username      = if ($username) { $username } else { 'N/A' }
-                            ID            = $sessionInfo.SessionId
-                            State         = $stateDisplay
-                            Type          = 'RDP'
-                            ClientName    = if ($clientName) { $clientName } else { 'N/A' }
-                            ClientIP      = if ($clientIP) { $clientIP } else { 'Unknown' }
-                            ClientBuild   = if ($clientBuild) { $clientBuild } else { 'N/A' }
-                            ClientDisplay = if ($clientDisplay) { "$($clientDisplay.Width)x$($clientDisplay.Height) ($($clientDisplay.ColorDepth)bit)" } else { 'N/A' }
-                            IdleTime      = $idleTimeDisplay
-                            ConnectTime   = if ($connectTime) { $connectTime } else { $null }
+                        # Only include active/disconnected RDP sessions
+                        # Exclude: console (local), services (system), Listen states (RDP listeners)
+                        # Include: rdp-tcp#X sessions with Active/Disc/Conn states
+                        if ($sessionName -match 'rdp-tcp#\d+' -and $state -notmatch 'Listen') {
+                            # Use WTS API to get extended session properties
+                            $clientName = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientName)
+                            $clientIP = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientAddress)
+                            $clientBuild = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientBuildNumber)
+                            $clientDisplay = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientDisplay)
+                            $idleTime = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSIdleTime)
+                            $connectTime = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSLogonTime)
+                            
+                            # Calculate idle time in readable format
+                            $idleTimeDisplay = if ($idleTime -ne $null -and $idleTime -ge 0) {
+                                $idleMinutes = [Math]::Floor($idleTime / 60000)
+                                if ($idleMinutes -lt 1) { "<1 min" }
+                                elseif ($idleMinutes -lt 60) { "$idleMinutes min" }
+                                else { "$([Math]::Floor($idleMinutes / 60))h $($idleMinutes % 60)m" }
+                            } else { "N/A" }
+                            
+                            $sessionObjects += [PSCustomObject]@{
+                                SessionName = $sessionName
+                                Username = if ($username -and $username -ne '') { $username } else { 'N/A' }
+                                ID = $id
+                                State = $state
+                                Type = 'RDP'
+                                ClientName = if ($clientName) { $clientName } else { 'N/A' }
+                                ClientIP = if ($clientIP) { $clientIP } else { 'Unknown' }
+                                ClientBuild = if ($clientBuild) { $clientBuild } else { 'N/A' }
+                                ClientDisplay = if ($clientDisplay) { "$($clientDisplay.Width)x$($clientDisplay.Height) ($($clientDisplay.ColorDepth)bit)" } else { 'N/A' }
+                                IdleTime = $idleTimeDisplay
+                                ConnectTime = if ($connectTime) { $connectTime } else { $null }
+                            }
                         }
                     }
-                }
-                
-                # Free the session info memory
-                if ($sessionInfoPtr -ne [IntPtr]::Zero) {
-                    [WTSApi]::WTSFreeMemory($sessionInfoPtr)
                 }
             }
         
