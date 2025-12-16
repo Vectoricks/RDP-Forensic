@@ -264,8 +264,8 @@ function Get-CurrentRDPSessions {
                         return [System.Runtime.InteropServices.Marshal]::ReadInt32($buffer)
                     }
                     default {
-                        # String properties
-                        return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($buffer)
+                        # String properties - use Unicode marshaling
+                        return [System.Runtime.InteropServices.Marshal]::PtrToStringUni($buffer)
                     }
                 }
             }
