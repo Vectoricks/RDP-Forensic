@@ -501,7 +501,7 @@ function Get-RDPForensics {
                 EndTime   = $End
             } -ErrorAction SilentlyContinue | Where-Object {
                 # Filter for RDP LogonTypes: 10 (RemoteInteractive), 7 (Unlock/Reconnect), 3 (Network-can be RDP), 5 (Service/Console)
-                $_.Message -match 'Logon Type:\s+(10|7|3|5)\s'
+                $_.Message -match 'Logon Type:\s+(10|7|3|5)'
             }
             
             # Optionally collect Kerberos and NTLM pre-authentication events
