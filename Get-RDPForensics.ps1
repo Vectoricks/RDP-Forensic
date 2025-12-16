@@ -173,21 +173,19 @@ function Get-RDPForensics {
         $sessionMap = @{}
         
         foreach ($event in $Events) {
-            # Determine correlation key with priority: ActivityID > LogonID > SessionID
+            # Determine correlation key with priority: LogonID > SessionID (ActivityID kept for reference only)
             $correlationKey = $null
             
-            # Priority 1: Use ActivityID from Correlation element (most accurate cross-log correlation)
-            if ($event.ActivityID -and $event.ActivityID -ne 'N/A' -and $event.ActivityID -ne $null) {
-                $correlationKey = "ActivityID:$($event.ActivityID)"
-            }
-            # Priority 2: Use LogonID from Security log events
-            elseif ($event.LogonID -and $event.LogonID -ne 'N/A' -and $event.LogonID -ne $null) {
+            # Priority 1: Use LogonID from Security log events (best cross-log correlation)
+            if ($event.LogonID -and $event.LogonID -ne 'N/A' -and $event.LogonID -ne $null) {
                 $correlationKey = "LogonID:$($event.LogonID)"
             }
-            # Priority 3: Use SessionID from TerminalServices events
+            # Priority 2: Use SessionID from TerminalServices events
             elseif ($event.SessionID -and $event.SessionID -ne 'N/A' -and $event.SessionID -ne $null) {
                 $correlationKey = "SessionID:$($event.SessionID)"
             }
+            # Note: ActivityID is preserved in events for forensic analysis but not used for correlation
+            # as it's provider-specific and doesn't reliably match across Security/TerminalServices logs
             
             if ($correlationKey) {
                 if (-not $sessionMap.ContainsKey($correlationKey)) {
@@ -298,6 +296,62 @@ function Get-RDPForensics {
             ($_.EventID -notin 4768, 4769, 4770, 4771, 4772, 4776) -or
             # OR keep pre-auth events that were correlated to RDP sessions
             ($_.CorrelatedToRDP -eq $true)
+        }
+        
+        # Secondary Correlation: Merge SessionID-based sessions into LogonID-based sessions
+        # This handles the case where TerminalServices events (21-25) have SessionID but no LogonID
+        # while Security events (4624, 4778, 4779, 4634) have LogonID
+        # Match sessions based on: Username + Time Proximity (within 10 seconds) + RDP LogonType
+        $sessionIDSessions = @($sessionMap.Keys | Where-Object { $_ -like "SessionID:*" })
+        $logonIDSessions = @($sessionMap.Keys | Where-Object { $_ -like "LogonID:*" })
+        
+        foreach ($sessionIDKey in $sessionIDSessions) {
+            $sessionIDSession = $sessionMap[$sessionIDKey]
+            $sessionIDStart = ($sessionIDSession.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
+            
+            # Find matching LogonID session
+            $matchedLogonIDKey = $null
+            $closestTimeDiff = [TimeSpan]::MaxValue
+            
+            foreach ($logonIDKey in $logonIDSessions) {
+                $logonIDSession = $sessionMap[$logonIDKey]
+                
+                # Match criteria: Same user + Time proximity (within ±10 seconds) + RDP LogonType
+                if ($logonIDSession.User -eq $sessionIDSession.User) {
+                    $logonIDStart = ($logonIDSession.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
+                    $timeDiff = [Math]::Abs(($logonIDStart - $sessionIDStart).TotalSeconds)
+                    
+                    # Check if this is an RDP session (LogonType 10, 7, or 3)
+                    $hasRDPLogonType = $logonIDSession.Events | Where-Object { 
+                        $_.EventID -eq 4624 -and 
+                        $_.Details -match 'RemoteInteractive|Unlock/Reconnect|Network' 
+                    }
+                    
+                    if ($timeDiff -le 10 -and $hasRDPLogonType) {
+                        if ($timeDiff -lt $closestTimeDiff) {
+                            $closestTimeDiff = $timeDiff
+                            $matchedLogonIDKey = $logonIDKey
+                        }
+                    }
+                }
+            }
+            
+            # Merge SessionID events into LogonID session
+            if ($matchedLogonIDKey) {
+                $sessionMap[$matchedLogonIDKey].Events += $sessionIDSession.Events
+                # Update SessionID in LogonID session
+                if (-not $sessionMap[$matchedLogonIDKey].SessionID -or $sessionMap[$matchedLogonIDKey].SessionID -eq 'N/A') {
+                    $sessionMap[$matchedLogonIDKey].SessionID = $sessionIDSession.SessionID
+                }
+                # Merge lifecycle flags
+                foreach ($key in $sessionIDSession.Lifecycle.Keys) {
+                    if ($sessionIDSession.Lifecycle[$key]) {
+                        $sessionMap[$matchedLogonIDKey].Lifecycle[$key] = $true
+                    }
+                }
+                # Remove the SessionID session (merged into LogonID session)
+                $sessionMap.Remove($sessionIDKey)
+            }
         }
         
         # Calculate session durations and create session objects
@@ -1125,13 +1179,13 @@ function Get-RDPForensics {
     # Correlate events by LogonID and SessionID if GroupBySession is specified
     if ($GroupBySession) {
         Write-Host "`n" -NoNewline
-        Write-Host "$(Get-Emoji 'key') Correlating events by ActivityID/LogonID/SessionID..." -ForegroundColor Cyan
+        Write-Host "$(Get-Emoji 'key') Correlating events by LogonID/SessionID..." -ForegroundColor Cyan
         $correlationResult = Get-CorrelatedSessions -Events $allEvents
         $sessions = $correlationResult.Sessions
         $allEvents = $correlationResult.FilteredEvents  # Use filtered events (pre-auth events matched to RDP only)
         Write-Host "  $(Get-Emoji 'check') Found " -ForegroundColor Green -NoNewline
         Write-Host "$($sessions.Count)" -ForegroundColor White -NoNewline
-        Write-Host " unique sessions (using ActivityID-based correlation)" -ForegroundColor Green
+        Write-Host " unique sessions (using LogonID-based correlation)" -ForegroundColor Green
         
         if ($IncludeCredentialValidation) {
             $preAuthCount = ($allEvents | Where-Object { $_.EventID -in 4768, 4769, 4770, 4771, 4772, 4776 }).Count

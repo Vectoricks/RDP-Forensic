@@ -372,6 +372,84 @@ Write-Host "  Events: $reportPath\RDP_Forensics_<timestamp>.csv" -ForegroundColo
 Write-Host "  Sessions: $reportPath\RDP_Sessions_<timestamp>.csv" -ForegroundColor Gray
 #>
 
+# ============================================================================
+# SCENARIO 13: Test v1.0.7 Enhanced Correlation (NEW)
+# ============================================================================
+<#
+Write-Host "SCENARIO 13: Test v1.0.7 Enhanced Correlation" -ForegroundColor Green
+Write-Host "Demonstrates improved LogonID-first correlation with SessionID merging"
+Write-Host ""
+
+# Test 1: View improved session correlation
+Write-Host "Test 1: Session Correlation with LogonID-first + SessionID Merge" -ForegroundColor Cyan
+Write-Host "Should show fewer fragmented sessions, higher event counts per session" -ForegroundColor Yellow
+Write-Host ""
+
+$sessions = .\Get-RDPForensics.ps1 -StartDate (Get-Date).AddHours(-2) -GroupBySession
+
+# Display first 3 sessions with detailed info
+$sessions | Select-Object -First 3 | Format-List `
+    CorrelationKey, 
+    User, 
+    SourceIP, 
+    EventCount, 
+    StartTime, 
+    EndTime, 
+    Duration, 
+    ConnectionAttempt, 
+    Logon, 
+    Active, 
+    Logoff, 
+    LifecycleComplete
+
+Write-Host "`nKey Improvements in v1.0.7:" -ForegroundColor Green
+Write-Host "  ✓ LogonID-first correlation (better cross-log matching)" -ForegroundColor Gray
+Write-Host "  ✓ Secondary correlation merges SessionID into LogonID sessions" -ForegroundColor Gray
+Write-Host "  ✓ Matching criteria: Username + Time (±10s) + RDP LogonType (10/7/3)" -ForegroundColor Gray
+Write-Host ""
+
+# Test 2: View merged events in a single session
+Write-Host "Test 2: View All Events in First Session (Security + TerminalServices merged)" -ForegroundColor Cyan
+Write-Host ""
+
+$firstSession = $sessions | Select-Object -First 1
+Write-Host "Session: $($firstSession.CorrelationKey)" -ForegroundColor White
+Write-Host "Total Events: $($firstSession.EventCount) (should include both Security + TerminalServices)" -ForegroundColor Yellow
+Write-Host ""
+
+$firstSession.Events | Select-Object TimeCreated, EventID, EventType, User, SessionID, LogonID | 
+    Format-Table -AutoSize
+
+Write-Host "`nExpected Event Types in Complete Session:" -ForegroundColor Green
+Write-Host "  • Connection Attempt (1149)" -ForegroundColor Gray
+Write-Host "  • Successful Logon (4624)" -ForegroundColor Gray
+Write-Host "  • Session Logon Succeeded (21)" -ForegroundColor Gray
+Write-Host "  • Shell Start Notification (22)" -ForegroundColor Gray
+Write-Host "  • Session Reconnected (4778) or Disconnected (4779)" -ForegroundColor Gray
+Write-Host "  • Session Logoff Succeeded (23)" -ForegroundColor Gray
+Write-Host "  • Account Logged Off (4634)" -ForegroundColor Gray
+Write-Host ""
+
+# Test 3: Compare correlation efficiency
+Write-Host "Test 3: Correlation Efficiency Statistics" -ForegroundColor Cyan
+Write-Host ""
+
+$totalSessions = $sessions.Count
+$completeLifecycle = ($sessions | Where-Object { $_.LifecycleComplete }).Count
+$avgEventCount = ($sessions | Measure-Object -Property EventCount -Average).Average
+$logonIDSessions = ($sessions | Where-Object { $_.CorrelationKey -like "LogonID:*" }).Count
+$sessionIDOnly = ($sessions | Where-Object { $_.CorrelationKey -like "SessionID:*" }).Count
+
+Write-Host "Total Sessions: $totalSessions" -ForegroundColor White
+Write-Host "Complete Lifecycle: $completeLifecycle ($([math]::Round($completeLifecycle/$totalSessions*100, 1))%)" -ForegroundColor Green
+Write-Host "Average Events/Session: $([math]::Round($avgEventCount, 1))" -ForegroundColor Yellow
+Write-Host "LogonID-correlated: $logonIDSessions" -ForegroundColor Cyan
+Write-Host "SessionID-only (not merged): $sessionIDOnly" -ForegroundColor $(if($sessionIDOnly -eq 0){'Green'}else{'Yellow'})"
+Write-Host ""
+
+Write-Host "✓ Test complete! Sessions should show better correlation in v1.0.7" -ForegroundColor Green
+#>
+
 Write-Host "`nTo run an example, uncomment the desired scenario in this file and run again." -ForegroundColor Cyan
 Write-Host "Example scenarios available:" -ForegroundColor Yellow
 Write-Host "  1. Daily Security Review" -ForegroundColor Gray
@@ -386,4 +464,5 @@ Write-Host "  9. Monthly Executive Report" -ForegroundColor Gray
 Write-Host " 10. Incident Response - Full Investigation" -ForegroundColor Gray
 Write-Host " 11. Real-Time Session Monitoring (Auto-Refresh)" -ForegroundColor Gray
 Write-Host " 12. Session Correlation & Lifecycle Analysis" -ForegroundColor Gray
+Write-Host " 13. Test v1.0.7 Enhanced Correlation (NEW)" -ForegroundColor Green
 Write-Host ""

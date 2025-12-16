@@ -39,24 +39,24 @@ Describe "Get-RDPForensics Session Correlation Tests" {
             $functionContent | Should -Match '\$sessionMap\s*=\s*@\{\}'
         }
         
-        It "Should track ActivityID as correlation key (Priority 1)" {
-            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
-            $functionContent | Should -Match 'ActivityID:'
-        }
-        
-        It "Should track LogonID as correlation key (Priority 2)" {
+        It "Should track LogonID as correlation key (Priority 1)" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
             $functionContent | Should -Match 'LogonID:'
         }
         
-        It "Should track SessionID as correlation key (Priority 3)" {
+        It "Should track SessionID as correlation key (Priority 2)" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
             $functionContent | Should -Match 'SessionID:'
         }
         
-        It "Should prioritize ActivityID over LogonID" {
+        It "Should preserve ActivityID for forensic analysis" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
-            $functionContent | Should -Match 'Priority 1.*ActivityID'
+            $functionContent | Should -Match 'ActivityID'
+        }
+        
+        It "Should prioritize LogonID over SessionID" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'Priority 1.*LogonID'
         }
     }
     
