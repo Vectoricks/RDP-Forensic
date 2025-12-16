@@ -346,7 +346,7 @@ function Get-RDPForensics {
         
         # Return sessions and the filtered events array
         return @{
-            Sessions = ($sessions | Sort-Object StartTime -Descending)
+            Sessions       = ($sessions | Sort-Object StartTime -Descending)
             FilteredEvents = $Events
         }
     }
