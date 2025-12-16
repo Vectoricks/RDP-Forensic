@@ -79,7 +79,7 @@ Describe "Get-CurrentRDPSessions.ps1 - Script Validation" {
             # Alternative: check the actual default by examining the parameter metadata
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ScriptPath, [ref]$null, [ref]$null)
             $paramBlock = $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.ParameterAst] }, $true) | 
-                Where-Object { $_.Name.VariablePath.UserPath -eq 'RefreshInterval' }
+            Where-Object { $_.Name.VariablePath.UserPath -eq 'RefreshInterval' }
             $paramBlock.DefaultValue.Value | Should -Be 5
         }
     }
