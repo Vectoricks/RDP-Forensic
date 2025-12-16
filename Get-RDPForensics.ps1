@@ -32,6 +32,11 @@ function Get-RDPForensics {
 .PARAMETER IncludeOutbound
     Include outbound RDP connection logs from the client side.
 
+.PARAMETER GroupBySession
+    Group events by LogonID/SessionID to show correlated session lifecycles.
+    Displays session summary with duration, lifecycle stages, and completeness indicators.
+    Exports to separate CSV file (RDP_Sessions_<timestamp>.csv) when used with -ExportPath.
+
 .EXAMPLE
     Get-RDPForensics
     Get all RDP events for today.
@@ -44,9 +49,17 @@ function Get-RDPForensics {
     Get-RDPForensics -Username "john.doe" -StartDate (Get-Date).AddMonths(-1)
     Get RDP events for specific user in the last month.
 
+.EXAMPLE
+    Get-RDPForensics -GroupBySession
+    Display events grouped by session with complete lifecycle tracking.
+
+.EXAMPLE
+    Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports"
+    Analyze last 7 days of sessions and export both events and session summaries.
+
 .NOTES
     Author: Jan Tiedemann
-    Version: 1.0.1
+    Version: 1.0.4
     Based on: https://woshub.com/rdp-connection-logs-forensics-windows/
     Requires: Administrator privileges to read Security event logs
 #>
@@ -69,7 +82,10 @@ function Get-RDPForensics {
         [string]$SourceIP,
     
         [Parameter()]
-        [switch]$IncludeOutbound
+        [switch]$IncludeOutbound,
+
+        [Parameter()]
+        [switch]$GroupBySession
     )
 
     # Error handling preference
@@ -114,13 +130,122 @@ function Get-RDPForensics {
         return $emojis[$Name]
     }
 
+    # Function to correlate events across log sources
+    function Get-CorrelatedSessions {
+        param([array]$Events)
+
+        # Group events by LogonID and SessionID
+        $sessionMap = @{}
+        
+        foreach ($event in $Events) {
+            # Determine correlation key (LogonID or SessionID)
+            $correlationKey = $null
+            
+            if ($event.LogonID -and $event.LogonID -ne 'N/A' -and $event.LogonID -ne $null) {
+                $correlationKey = "LogonID:$($event.LogonID)"
+            }
+            elseif ($event.SessionID -and $event.SessionID -ne 'N/A' -and $event.SessionID -ne $null) {
+                $correlationKey = "SessionID:$($event.SessionID)"
+            }
+            
+            if ($correlationKey) {
+                if (-not $sessionMap.ContainsKey($correlationKey)) {
+                    $sessionMap[$correlationKey] = @{
+                        CorrelationKey = $correlationKey
+                        Events = @()
+                        User = $null
+                        SourceIP = $null
+                        StartTime = $null
+                        EndTime = $null
+                        Duration = $null
+                        LogonID = $event.LogonID
+                        SessionID = $event.SessionID
+                        Lifecycle = @{
+                            ConnectionAttempt = $false
+                            Authentication = $false
+                            Logon = $false
+                            Active = $false
+                            Disconnect = $false
+                            Logoff = $false
+                        }
+                    }
+                }
+                
+                # Add event to session
+                $sessionMap[$correlationKey].Events += $event
+                
+                # Track lifecycle stages
+                switch ($event.EventID) {
+                    1149 { $sessionMap[$correlationKey].Lifecycle.ConnectionAttempt = $true }
+                    4624 { $sessionMap[$correlationKey].Lifecycle.Authentication = $true }
+                    {$_ -in 21, 22} { $sessionMap[$correlationKey].Lifecycle.Logon = $true }
+                    {$_ -in 24, 25, 4778} { $sessionMap[$correlationKey].Lifecycle.Active = $true }
+                    {$_ -in 39, 40, 4779} { $sessionMap[$correlationKey].Lifecycle.Disconnect = $true }
+                    {$_ -in 23, 4634, 4647, 9009} { $sessionMap[$correlationKey].Lifecycle.Logoff = $true }
+                }
+                
+                # Update session metadata
+                if ($event.User -and $event.User -ne 'N/A') {
+                    $sessionMap[$correlationKey].User = $event.User
+                }
+                if ($event.SourceIP -and $event.SourceIP -ne 'N/A' -and $event.SourceIP -ne '-' -and $event.SourceIP -ne 'LOCAL') {
+                    $sessionMap[$correlationKey].SourceIP = $event.SourceIP
+                }
+            }
+        }
+        
+        # Calculate session durations and create session objects
+        $sessions = foreach ($key in $sessionMap.Keys) {
+            $session = $sessionMap[$key]
+            $sortedEvents = $session.Events | Sort-Object TimeCreated
+            
+            if ($sortedEvents.Count -gt 0) {
+                $session.StartTime = $sortedEvents[0].TimeCreated
+                $session.EndTime = $sortedEvents[-1].TimeCreated
+                
+                if ($session.StartTime -and $session.EndTime) {
+                    $session.Duration = $session.EndTime - $session.StartTime
+                }
+            }
+            
+            # Create session object
+            [PSCustomObject]@{
+                CorrelationKey = $session.CorrelationKey
+                User = $session.User
+                SourceIP = $session.SourceIP
+                LogonID = $session.LogonID
+                SessionID = $session.SessionID
+                StartTime = $session.StartTime
+                EndTime = $session.EndTime
+                Duration = if ($session.Duration) { 
+                    "{0:hh\:mm\:ss}" -f $session.Duration 
+                } else { 
+                    'N/A' 
+                }
+                EventCount = $session.Events.Count
+                ConnectionAttempt = $session.Lifecycle.ConnectionAttempt
+                Authentication = $session.Lifecycle.Authentication
+                Logon = $session.Lifecycle.Logon
+                Active = $session.Lifecycle.Active
+                Disconnect = $session.Lifecycle.Disconnect
+                Logoff = $session.Lifecycle.Logoff
+                LifecycleComplete = ($session.Lifecycle.ConnectionAttempt -or $session.Lifecycle.Authentication) -and 
+                                    $session.Lifecycle.Logon -and 
+                                    $session.Lifecycle.Logoff
+                Events = $session.Events
+            }
+        }
+        
+        return $sessions | Sort-Object StartTime -Descending
+    }
+
     # ASCII Art Header
     Write-Host "`n" -NoNewline
     $topLeft = [char]0x2554; $topRight = [char]0x2557; $bottomLeft = [char]0x255A; $bottomRight = [char]0x255D
     $horizontal = [string][char]0x2550; $vertical = [char]0x2551
     Write-Host "$topLeft$($horizontal * 67)$topRight" -ForegroundColor Cyan
     Write-Host "$vertical" -ForegroundColor Cyan -NoNewline
-    Write-Host "          RDP FORENSICS ANALYSIS TOOL v1.0.3                       " -ForegroundColor White -NoNewline
+    Write-Host "          RDP FORENSICS ANALYSIS TOOL v1.0.4                       " -ForegroundColor White -NoNewline
     Write-Host "$vertical" -ForegroundColor Cyan
     Write-Host "$vertical" -ForegroundColor Cyan -NoNewline
     Write-Host "        Security Investigation & Audit Toolkit                     " -ForegroundColor Yellow -NoNewline
@@ -552,6 +677,16 @@ function Get-RDPForensics {
     # Sort by time
     $allEvents = $allEvents | Sort-Object TimeCreated -Descending
 
+    # Correlate events by LogonID and SessionID if GroupBySession is specified
+    if ($GroupBySession) {
+        Write-Host "`n" -NoNewline
+        Write-Host "$(Get-Emoji 'key') Correlating events by LogonID and SessionID..." -ForegroundColor Cyan
+        $sessions = Get-CorrelatedSessions -Events $allEvents
+        Write-Host "  $(Get-Emoji 'check') Found " -ForegroundColor Green -NoNewline
+        Write-Host "$($sessions.Count)" -ForegroundColor White -NoNewline
+        Write-Host " unique sessions" -ForegroundColor Green
+    }
+
     # Display results
     Write-Host "`n" -NoNewline
     $separator = [string][char]0x2500
@@ -568,13 +703,67 @@ function Get-RDPForensics {
         $groupedEvents | ForEach-Object {
             Write-Host "  $($_.Name): $($_.Count)" -ForegroundColor Gray
         }
-    
-        # Display recent events
-        Write-Host "`n" -NoNewline
-        Write-Host ($separator * 58) -ForegroundColor DarkCyan
-        Write-Host "$(Get-Emoji 'magnify') RECENT RDP EVENTS (Top 50)" -ForegroundColor Cyan
-        Write-Host ($separator * 58) -ForegroundColor DarkCyan
-        $allEvents | Select-Object -First 50 | Format-Table TimeCreated, EventID, EventType, User, SourceIP, Details -AutoSize
+
+        # Display session-grouped results if requested
+        if ($GroupBySession -and $sessions) {
+            Write-Host "`n" -NoNewline
+            Write-Host ($separator * 58) -ForegroundColor DarkCyan
+            Write-Host "$(Get-Emoji 'key') CORRELATED RDP SESSIONS" -ForegroundColor Cyan
+            Write-Host ($separator * 58) -ForegroundColor DarkCyan
+            
+            foreach ($session in $sessions | Select-Object -First 20) {
+                Write-Host "`n" -NoNewline
+                Write-Host "─── Session: " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$($session.CorrelationKey)" -ForegroundColor White -NoNewline
+                Write-Host " ───" -ForegroundColor DarkGray
+                
+                Write-Host "  $(Get-Emoji 'user') User: " -ForegroundColor Cyan -NoNewline
+                Write-Host "$($session.User)" -ForegroundColor White -NoNewline
+                Write-Host "  |  " -ForegroundColor DarkGray -NoNewline
+                Write-Host "$(Get-Emoji 'computer') Source IP: " -ForegroundColor Cyan -NoNewline
+                Write-Host "$($session.SourceIP)" -ForegroundColor White
+                
+                Write-Host "  $(Get-Emoji 'clock') Start: " -ForegroundColor Cyan -NoNewline
+                Write-Host "$($session.StartTime)" -ForegroundColor White -NoNewline
+                Write-Host "  |  End: " -ForegroundColor Cyan -NoNewline
+                Write-Host "$($session.EndTime)" -ForegroundColor White -NoNewline
+                Write-Host "  |  Duration: " -ForegroundColor Cyan -NoNewline
+                Write-Host "$($session.Duration)" -ForegroundColor Yellow
+                
+                Write-Host "  $(Get-Emoji 'chart') Lifecycle: " -ForegroundColor Cyan -NoNewline
+                if ($session.ConnectionAttempt) { Write-Host "Connect " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
+                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                if ($session.Authentication) { Write-Host "Auth " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
+                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                if ($session.Logon) { Write-Host "Logon " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
+                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                if ($session.Active) { Write-Host "Active " -ForegroundColor Green -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
+                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                if ($session.Disconnect) { Write-Host "Disconnect " -ForegroundColor Yellow -NoNewline } else { Write-Host "- " -ForegroundColor DarkGray -NoNewline }
+                Write-Host "→ " -ForegroundColor DarkGray -NoNewline
+                if ($session.Logoff) { Write-Host "Logoff" -ForegroundColor Green } else { Write-Host "-" -ForegroundColor DarkGray }
+                
+                Write-Host "  $(Get-Emoji 'folder') Events: " -ForegroundColor Cyan -NoNewline
+                Write-Host "$($session.EventCount)" -ForegroundColor White -NoNewline
+                if (-not $session.LifecycleComplete) {
+                    Write-Host "  $(Get-Emoji 'warning') Incomplete session lifecycle!" -ForegroundColor Red
+                } else {
+                    Write-Host ""
+                }
+            }
+            
+            if ($sessions.Count -gt 20) {
+                Write-Host "`n... and $($sessions.Count - 20) more sessions" -ForegroundColor DarkGray
+            }
+        }
+        else {
+            # Display recent events (default view)
+            Write-Host "`n" -NoNewline
+            Write-Host ($separator * 58) -ForegroundColor DarkCyan
+            Write-Host "$(Get-Emoji 'magnify') RECENT RDP EVENTS (Top 50)" -ForegroundColor Cyan
+            Write-Host ($separator * 58) -ForegroundColor DarkCyan
+            $allEvents | Select-Object -First 50 | Format-Table TimeCreated, EventID, EventType, User, SourceIP, Details -AutoSize
+        }
     
         # Export if requested
         if ($ExportPath) {
@@ -613,6 +802,16 @@ $($allEvents | Where-Object { $_.SourceIP -ne 'N/A' -and $_.SourceIP -ne 'Local 
             $summary | Out-File -FilePath $summaryFile -Encoding UTF8
             Write-Host "$(Get-Emoji 'check') Summary exported to: " -ForegroundColor Green -NoNewline
             Write-Host "$summaryFile" -ForegroundColor White
+            
+            # Export sessions if correlation was used
+            if ($GroupBySession -and $sessions) {
+                $sessionFile = Join-Path $ExportPath "RDP_Sessions_$timestamp.csv"
+                $sessions | Select-Object CorrelationKey, User, SourceIP, StartTime, EndTime, Duration, EventCount, 
+                    ConnectionAttempt, Authentication, Logon, Active, Disconnect, Logoff, LifecycleComplete | 
+                    Export-Csv -Path $sessionFile -NoTypeInformation -Encoding UTF8
+                Write-Host "$(Get-Emoji 'check') Sessions exported to: " -ForegroundColor Green -NoNewline
+                Write-Host "$sessionFile" -ForegroundColor White
+            }
         }
     }
     else {

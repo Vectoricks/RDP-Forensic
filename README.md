@@ -3,7 +3,7 @@
 ![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue?logo=powershell)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20Server%20%7C%20Windows%2010%2F11-0078D4?logo=windows)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Version](https://img.shields.io/badge/Version-1.0.3-brightgreen)
+![Version](https://img.shields.io/badge/Version-1.0.4-brightgreen)
 ![Requires Admin](https://img.shields.io/badge/Requires-Administrator-red)
 ![Event Logs](https://img.shields.io/badge/Event%20Logs-Security%20%7C%20TerminalServices-orange)
 
@@ -20,6 +20,7 @@ This is the **only comprehensive, open-source PowerShell-native RDP forensics so
 | **Cost** | ✅ Free & Open Source | ✅ Built-in | ✅ Built-in |
 | **Event Coverage** | ✅ 15+ Event IDs | ⚠️ Manual queries | ⚠️ Manual filtering |
 | **Multi-Log Correlation** | ✅ 5 log sources | ❌ One at a time | ❌ Manual switching |
+| **Event Correlation** | ✅ Session grouping by LogonID | ❌ No | ❌ No |
 | **Lifecycle Tracking** | ✅ 6 stages | ❌ No | ❌ No |
 | **Brute Force Detection** | ✅ Built-in | ❌ Manual analysis | ❌ No |
 | **Session Duration Analysis** | ✅ Automatic | ❌ No | ❌ No |
@@ -73,10 +74,15 @@ The main forensics analysis cmdlet (Get-RDPForensics) collects and analyzes RDP 
 
 **Features:**
 - Collects events from Security, TerminalServices, and System logs
+- **Event Correlation** - Groups events by LogonID/SessionID across all log sources
+- **Session Lifecycle Tracking** - Visualizes complete session stages (connection → auth → logon → active → disconnect → logoff)
+- **Session Duration Analysis** - Calculates actual session time
 - Filters by date range, username, or source IP
-- Exports results to CSV format
+- Exports results to CSV format (events + sessions)
 - Generates summary reports
 - Supports outbound RDP connection tracking
+- **Real-time Monitoring** - Watch mode with auto-refresh
+- **Change Logging** - Tracks session state changes to CSV
 
 **Requirements:**
 - Windows Server 2012 R2 or later / Windows 8.1 or later
@@ -131,12 +137,53 @@ Get-RDPForensics -SourceIP "fe80::1" -StartDate (Get-Date).AddDays(-7)
 # Export results to CSV
 Get-RDPForensics -StartDate (Get-Date).AddDays(-30) -ExportPath "C:\Reports\RDP"
 
+# **NEW v1.0.4** - Group events by session with correlation
+Get-RDPForensics -GroupBySession
+
+# **NEW v1.0.4** - Analyze complete session lifecycles with export
+Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports\RDP"
+
 # Include outbound RDP connections
 Get-RDPForensics -IncludeOutbound
 
 # Get events for last month with export
 Get-RDPForensics -StartDate (Get-Date).AddMonths(-1) -ExportPath "C:\RDP_Analysis" -IncludeOutbound
 ```
+
+**Session Correlation & Lifecycle Analysis (NEW in v1.0.4):**
+
+```powershell
+# Group all events by LogonID/SessionID to see complete session lifecycles
+Get-RDPForensics -GroupBySession
+
+# Export both events AND correlated sessions to CSV
+Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports"
+# Creates: RDP_Forensics_<timestamp>.csv (individual events)
+#          RDP_Sessions_<timestamp>.csv (session summary)
+
+# Find incomplete sessions (missing logoff, suspicious disconnects)
+Get-RDPForensics -GroupBySession | Where-Object { -not $_.LifecycleComplete }
+
+# Analyze session durations for specific user
+Get-RDPForensics -Username "john.doe" -GroupBySession -StartDate (Get-Date).AddMonths(-1)
+
+# Identify long-running sessions (over 8 hours)
+$sessions = Get-RDPForensics -GroupBySession -StartDate (Get-Date).AddDays(-7)
+$sessions | Where-Object { 
+    $_.Duration -and 
+    [timespan]::Parse($_.Duration).TotalHours -gt 8 
+}
+
+# Track user activity patterns with session correlation
+Get-RDPForensics -Username "admin" -GroupBySession -StartDate (Get-Date).AddMonths(-1) -ExportPath "C:\Audit"
+```
+
+**Session Correlation Features:**
+- **Automatic Event Grouping** - Links events across Security, TerminalServices, and System logs using LogonID/SessionID
+- **Complete Lifecycle Visualization** - Shows which stages completed: Connection → Auth → Logon → Active → Disconnect → Logoff
+- **Duration Calculation** - Accurate session time from first event to last
+- **Anomaly Detection** - Identifies incomplete sessions (e.g., logon without logoff)
+- **Dual Export** - Saves both raw events AND session summaries to CSV
 
 **Advanced Forensic Filtering Examples:**
 

@@ -8,7 +8,7 @@
 
 .NOTES
     Author: Jan Tiedemann
-    Version: 1.0.3
+    Version: 1.0.4
     Uncomment the scenarios you want to run.
 #>
 
@@ -330,6 +330,48 @@ Write-Host "`n=== Current RDP Sessions ===" -ForegroundColor Yellow
 Write-Host "`nInvestigation complete. Results saved to: $investigationPath" -ForegroundColor Green
 #>
 
+# ============================================================================
+# SCENARIO 12: Session Correlation & Lifecycle Analysis (NEW in v1.0.4)
+# ============================================================================
+<#
+Write-Host "SCENARIO 12: Session Correlation & Lifecycle Analysis" -ForegroundColor Green
+Write-Host "Correlate events across all log sources to track complete session lifecycles"
+
+$reportPath = "C:\RDP_Reports\Sessions"
+
+# Analyze last 7 days with session grouping
+Write-Host "`nAnalyzing sessions from last 7 days..." -ForegroundColor Cyan
+$sessions = .\Get-RDPForensics.ps1 -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath $reportPath
+
+# Find incomplete sessions (missing logoff, etc.)
+$incompleteSessions = $sessions | Where-Object { -not $_.LifecycleComplete }
+if ($incompleteSessions) {
+    Write-Host "`n=== Incomplete Sessions Detected ===" -ForegroundColor Yellow
+    Write-Host "Found $($incompleteSessions.Count) incomplete sessions (missing logoff or other stages)" -ForegroundColor Red
+    $incompleteSessions | Select-Object User, SourceIP, StartTime, Duration | Format-Table
+}
+
+# Find long-running sessions (over 8 hours)
+Write-Host "`n=== Long-Running Sessions ===" -ForegroundColor Yellow
+$longSessions = $sessions | Where-Object { 
+    $_.Duration -and 
+    [timespan]::Parse($_.Duration).TotalHours -gt 8 
+}
+if ($longSessions) {
+    Write-Host "Found $($longSessions.Count) sessions over 8 hours" -ForegroundColor Cyan
+    $longSessions | Select-Object User, SourceIP, StartTime, Duration | Format-Table
+}
+
+# User activity summary
+Write-Host "`n=== User Activity Summary ===" -ForegroundColor Yellow
+$userActivity = $sessions | Where-Object { $_.User -ne 'N/A' } | Group-Object User | Sort-Object Count -Descending
+$userActivity | Select-Object @{N='User';E={$_.Name}}, Count, @{N='FirstSession';E={($_.Group | Sort-Object StartTime)[0].StartTime}} | Format-Table
+
+Write-Host "`nSession analysis complete. Exported to:" -ForegroundColor Green
+Write-Host "  Events: $reportPath\RDP_Forensics_<timestamp>.csv" -ForegroundColor Gray
+Write-Host "  Sessions: $reportPath\RDP_Sessions_<timestamp>.csv" -ForegroundColor Gray
+#>
+
 Write-Host "`nTo run an example, uncomment the desired scenario in this file and run again." -ForegroundColor Cyan
 Write-Host "Example scenarios available:" -ForegroundColor Yellow
 Write-Host "  1. Daily Security Review" -ForegroundColor Gray
@@ -343,4 +385,5 @@ Write-Host "  8. Monitor Current Sessions" -ForegroundColor Gray
 Write-Host "  9. Monthly Executive Report" -ForegroundColor Gray
 Write-Host " 10. Incident Response - Full Investigation" -ForegroundColor Gray
 Write-Host " 11. Real-Time Session Monitoring (Auto-Refresh)" -ForegroundColor Gray
+Write-Host " 12. Session Correlation & Lifecycle Analysis" -ForegroundColor Gray
 Write-Host ""
