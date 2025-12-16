@@ -51,8 +51,14 @@ function Get-CurrentRDPSessions {
 
 .NOTES
     Author: Jan Tiedemann
-    Version: 1.0.7
+    Version: 1.0.8
     Requires: Administrator privileges
+    
+    Changelog v1.0.8:
+    - Added Win32 API (WTS) integration for extended session properties
+    - New properties: IdleTime, ClientIPAddress, ClientName, EncryptionLevel
+    - New properties: ConnectTime, ClientBuildNumber, ClientDisplay, ColorDepth
+    - Improved accuracy without Event Log dependency for basic info
 #>
 
     [CmdletBinding()]
@@ -73,6 +79,108 @@ function Get-CurrentRDPSessions {
         [Parameter()]
         [string]$LogPath
     )
+
+    # Win32 API Definitions for Windows Terminal Services (WTS)
+    Add-Type -TypeDefinition @"
+    using System;
+    using System.Runtime.InteropServices;
+    
+    public enum WTS_CONNECTSTATE_CLASS
+    {
+        WTSActive,
+        WTSConnected,
+        WTSConnectQuery,
+        WTSShadow,
+        WTSDisconnected,
+        WTSIdle,
+        WTSListen,
+        WTSReset,
+        WTSDown,
+        WTSInit
+    }
+    
+    public enum WTS_INFO_CLASS
+    {
+        WTSInitialProgram,
+        WTSApplicationName,
+        WTSWorkingDirectory,
+        WTSOEMId,
+        WTSSessionId,
+        WTSUserName,
+        WTSWinStationName,
+        WTSDomainName,
+        WTSConnectState,
+        WTSClientBuildNumber,
+        WTSClientName,
+        WTSClientDirectory,
+        WTSClientProductId,
+        WTSClientHardwareId,
+        WTSClientAddress,
+        WTSClientDisplay,
+        WTSClientProtocolType,
+        WTSIdleTime,
+        WTSLogonTime,
+        WTSIncomingBytes,
+        WTSOutgoingBytes,
+        WTSIncomingFrames,
+        WTSOutgoingFrames,
+        WTSClientInfo,
+        WTSSessionInfo,
+        WTSSessionInfoEx,
+        WTSConfigInfo,
+        WTSValidationInfo,
+        WTSSessionAddressV4,
+        WTSIsRemoteSession
+    }
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WTS_SESSION_INFO
+    {
+        public int SessionId;
+        public IntPtr pWinStationName;
+        public WTS_CONNECTSTATE_CLASS State;
+    }
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WTS_CLIENT_ADDRESS
+    {
+        public int AddressFamily;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 20)]
+        public byte[] Address;
+    }
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WTS_CLIENT_DISPLAY
+    {
+        public int HorizontalResolution;
+        public int VerticalResolution;
+        public int ColorDepth;
+    }
+    
+    public class WTSApi
+    {
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        public static extern bool WTSEnumerateSessions(
+            IntPtr hServer,
+            int Reserved,
+            int Version,
+            out IntPtr ppSessionInfo,
+            out int pCount);
+        
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        public static extern bool WTSQuerySessionInformation(
+            IntPtr hServer,
+            int sessionId,
+            WTS_INFO_CLASS wtsInfoClass,
+            out IntPtr ppBuffer,
+            out int pBytesReturned);
+        
+        [DllImport("wtsapi32.dll")]
+        public static extern void WTSFreeMemory(IntPtr pMemory);
+        
+        public static readonly IntPtr WTS_CURRENT_SERVER_HANDLE = IntPtr.Zero;
+    }
+"@ -ErrorAction SilentlyContinue
 
     # Emoji support for both PowerShell 5.1 and 7.x
     function Get-Emoji {
@@ -101,6 +209,71 @@ function Get-CurrentRDPSessions {
         return $emojis[$Name]
     }
 
+    # Helper function to query WTS session information
+    function Get-WTSSessionInfo {
+        param(
+            [int]$SessionId,
+            [WTS_INFO_CLASS]$InfoClass
+        )
+        
+        $buffer = [IntPtr]::Zero
+        $bytesReturned = 0
+        
+        try {
+            $result = [WTSApi]::WTSQuerySessionInformation(
+                [WTSApi]::WTS_CURRENT_SERVER_HANDLE,
+                $SessionId,
+                $InfoClass,
+                [ref]$buffer,
+                [ref]$bytesReturned
+            )
+            
+            if ($result -and $buffer -ne [IntPtr]::Zero) {
+                switch ($InfoClass) {
+                    ([WTS_INFO_CLASS]::WTSClientAddress) {
+                        $clientAddr = [System.Runtime.InteropServices.Marshal]::PtrToStructure($buffer, [Type][WTS_CLIENT_ADDRESS])
+                        if ($clientAddr.AddressFamily -eq 2) {  # AF_INET (IPv4)
+                            return "$($clientAddr.Address[2]).$($clientAddr.Address[3]).$($clientAddr.Address[4]).$($clientAddr.Address[5])"
+                        }
+                        return "Unknown"
+                    }
+                    ([WTS_INFO_CLASS]::WTSClientDisplay) {
+                        $display = [System.Runtime.InteropServices.Marshal]::PtrToStructure($buffer, [Type][WTS_CLIENT_DISPLAY])
+                        return [PSCustomObject]@{
+                            Width = $display.HorizontalResolution
+                            Height = $display.VerticalResolution
+                            ColorDepth = $display.ColorDepth
+                        }
+                    }
+                    ([WTS_INFO_CLASS]::WTSIdleTime) {
+                        $idleTime = [System.Runtime.InteropServices.Marshal]::ReadInt64($buffer)
+                        return $idleTime
+                    }
+                    ([WTS_INFO_CLASS]::WTSLogonTime) {
+                        $logonTime = [System.Runtime.InteropServices.Marshal]::ReadInt64($buffer)
+                        if ($logonTime -gt 0) {
+                            return [DateTime]::FromFileTime($logonTime)
+                        }
+                        return $null
+                    }
+                    ([WTS_INFO_CLASS]::WTSClientBuildNumber) {
+                        return [System.Runtime.InteropServices.Marshal]::ReadInt32($buffer)
+                    }
+                    default {
+                        # String properties
+                        return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($buffer)
+                    }
+                }
+            }
+            return $null
+        }
+        finally {
+            if ($buffer -ne [IntPtr]::Zero) {
+                [WTSApi]::WTSFreeMemory($buffer)
+            }
+        }
+    }
+
     # Initialize logging if LogPath is specified
     $logFile = $null
     $previousSessions = @{}
@@ -115,8 +288,8 @@ function Get-CurrentRDPSessions {
         $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $logFile = Join-Path $LogPath "RDP_SessionMonitor_$timestamp.csv"
         
-        # Write CSV header
-        "Timestamp,EventType,SessionName,Username,SessionID,State,SourceIP,Details" | Out-File -FilePath $logFile -Encoding UTF8
+        # Write CSV header with extended properties
+        "Timestamp,EventType,SessionName,Username,SessionID,State,ClientIP,ClientName,ClientBuild,IdleTime,Details" | Out-File -FilePath $logFile -Encoding UTF8
         
         Write-Host "$(Get-Emoji 'chart') Logging enabled: " -ForegroundColor Cyan -NoNewline
         Write-Host "$logFile" -ForegroundColor Green
@@ -139,7 +312,7 @@ function Get-CurrentRDPSessions {
         $horizontal = [string][char]0x2550; $vertical = [char]0x2551
         Write-Host "$topLeft$($horizontal * 51)$topRight" -ForegroundColor Green
         Write-Host "$vertical" -ForegroundColor Green -NoNewline
-        Write-Host "     ACTIVE RDP SESSIONS MONITOR v1.0.4            " -ForegroundColor White -NoNewline
+        Write-Host "     ACTIVE RDP SESSIONS MONITOR v1.0.8            " -ForegroundColor White -NoNewline
         Write-Host "$vertical" -ForegroundColor Green
         Write-Host "$bottomLeft$($horizontal * 51)$bottomRight" -ForegroundColor Green
         Write-Host ""
@@ -154,35 +327,80 @@ function Get-CurrentRDPSessions {
         }
         Write-Host ""
 
-        # Get current sessions using qwinsta
+        # Get current sessions using WTS API
         try {
-            $sessions = qwinsta 2>$null
-    
-            if ($sessions) {
-                # Parse qwinsta output
-                $sessionObjects = @()
-        
-                foreach ($line in $sessions | Select-Object -Skip 1) {
-                    if ($line -match '^\s*>?\s*(\S+)\s+(\S+|\s+)\s+(\d+)\s+(\S+)') {
-                        $sessionName = $matches[1].Trim()
-                        $username = $matches[2].Trim()
-                        $id = $matches[3].Trim()
-                        $state = $matches[4].Trim()
+            $sessionObjects = @()
+            $sessionInfoPtr = [IntPtr]::Zero
+            $sessionCount = 0
+            
+            # Enumerate all sessions
+            $result = [WTSApi]::WTSEnumerateSessions(
+                [WTSApi]::WTS_CURRENT_SERVER_HANDLE,
+                0,
+                1,
+                [ref]$sessionInfoPtr,
+                [ref]$sessionCount
+            )
+            
+            if ($result -and $sessionCount -gt 0) {
+                $sessionInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][WTS_SESSION_INFO])
                 
-                        # Only include active/disconnected RDP sessions
-                        # Exclude: console (local), services (system), Listen states (RDP listeners)
-                        # Include: rdp-tcp#X sessions with Active/Disc/Conn states
-                        if ($sessionName -match 'rdp-tcp#\d+' -and $state -notmatch 'Listen') {
-                            $sessionObjects += [PSCustomObject]@{
-                                SessionName = $sessionName
-                                Username    = if ($username -and $username -ne '') { $username } else { 'N/A' }
-                                ID          = [int]$id
-                                State       = $state
-                                Type        = 'RDP'
-                            }
+                for ($i = 0; $i -lt $sessionCount; $i++) {
+                    $offset = [IntPtr]::Add($sessionInfoPtr, $i * $sessionInfoSize)
+                    $sessionInfo = [System.Runtime.InteropServices.Marshal]::PtrToStructure($offset, [Type][WTS_SESSION_INFO])
+                    
+                    $sessionName = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($sessionInfo.pWinStationName)
+                    $state = $sessionInfo.State.ToString()
+                    
+                    # Only include RDP sessions (exclude console, services, listeners)
+                    if ($sessionName -match 'rdp-tcp#\d+' -and $state -ne 'WTSListen') {
+                        # Query extended session information
+                        $username = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSUserName)
+                        $clientName = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientName)
+                        $clientIP = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientAddress)
+                        $clientBuild = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientBuildNumber)
+                        $clientDisplay = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientDisplay)
+                        $idleTime = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSIdleTime)
+                        $connectTime = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSLogonTime)
+                        
+                        # Convert state to user-friendly format
+                        $stateDisplay = switch ($state) {
+                            'WTSActive' { 'Active' }
+                            'WTSDisconnected' { 'Disc' }
+                            'WTSConnected' { 'Conn' }
+                            'WTSIdle' { 'Idle' }
+                            default { $state -replace 'WTS', '' }
+                        }
+                        
+                        # Calculate idle time in readable format
+                        $idleTimeDisplay = if ($idleTime -ne $null -and $idleTime -ge 0) {
+                            $idleMinutes = [Math]::Floor($idleTime / 60000)
+                            if ($idleMinutes -lt 1) { "<1 min" }
+                            elseif ($idleMinutes -lt 60) { "$idleMinutes min" }
+                            else { "$([Math]::Floor($idleMinutes / 60))h $($idleMinutes % 60)m" }
+                        } else { "N/A" }
+                        
+                        $sessionObjects += [PSCustomObject]@{
+                            SessionName = $sessionName
+                            Username = if ($username) { $username } else { 'N/A' }
+                            ID = $sessionInfo.SessionId
+                            State = $stateDisplay
+                            Type = 'RDP'
+                            ClientName = if ($clientName) { $clientName } else { 'N/A' }
+                            ClientIP = if ($clientIP) { $clientIP } else { 'Unknown' }
+                            ClientBuild = if ($clientBuild) { $clientBuild } else { 'N/A' }
+                            ClientDisplay = if ($clientDisplay) { "$($clientDisplay.Width)x$($clientDisplay.Height) ($($clientDisplay.ColorDepth)bit)" } else { 'N/A' }
+                            IdleTime = $idleTimeDisplay
+                            ConnectTime = if ($connectTime) { $connectTime } else { $null }
                         }
                     }
                 }
+                
+                # Free the session info memory
+                if ($sessionInfoPtr -ne [IntPtr]::Zero) {
+                    [WTSApi]::WTSFreeMemory($sessionInfoPtr)
+                }
+            }
         
                 # Log changes if logging is enabled
                 if ($logFile -and $iterationCount -gt 0) {
@@ -195,13 +413,13 @@ function Get-CurrentRDPSessions {
                         # Check for new sessions or state changes
                         if (-not $previousSessions.ContainsKey($key)) {
                             # New session detected
-                            $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),NEW_SESSION,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),,New RDP session detected"
+                            $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),NEW_SESSION,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$($session.ClientBuild),$($session.IdleTime),New RDP session detected"
                             $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
-                            Write-Host "  [LOG] New session: $($session.Username) (ID: $($session.ID))" -ForegroundColor Green
+                            Write-Host "  [LOG] New session: $($session.Username) from $($session.ClientIP) (ID: $($session.ID))" -ForegroundColor Green
                         }
                         elseif ($previousSessions[$key].State -ne $session.State) {
                             # State change detected
-                            $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),STATE_CHANGE,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),,State changed from $($previousSessions[$key].State) to $($session.State)"
+                            $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),STATE_CHANGE,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$($session.ClientBuild),$($session.IdleTime),State changed from $($previousSessions[$key].State) to $($session.State)"
                             $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
                             Write-Host "  [LOG] State change: $($session.Username) - $($previousSessions[$key].State) -> $($session.State)" -ForegroundColor Yellow
                         }
@@ -211,9 +429,9 @@ function Get-CurrentRDPSessions {
                     foreach ($key in $previousSessions.Keys) {
                         if (-not $currentSessionKeys.ContainsKey($key)) {
                             $oldSession = $previousSessions[$key]
-                            $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),SESSION_ENDED,$($oldSession.SessionName),$($oldSession.Username),$($oldSession.ID),$($oldSession.State),,Session ended or disconnected"
+                            $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),SESSION_ENDED,$($oldSession.SessionName),$($oldSession.Username),$($oldSession.ID),$($oldSession.State),$($oldSession.ClientIP),$($oldSession.ClientName),$($oldSession.ClientBuild),$($oldSession.IdleTime),Session ended or disconnected"
                             $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
-                            Write-Host "  [LOG] Session ended: $($oldSession.Username) (ID: $($oldSession.ID))" -ForegroundColor Red
+                            Write-Host "  [LOG] Session ended: $($oldSession.Username) from $($oldSession.ClientIP) (ID: $($oldSession.ID))" -ForegroundColor Red
                         }
                     }
                 
@@ -225,7 +443,7 @@ function Get-CurrentRDPSessions {
                     foreach ($session in $sessionObjects) {
                         $key = "$($session.SessionName)-$($session.ID)"
                         $previousSessions[$key] = $session
-                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),INITIAL_STATE,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),,Monitoring started - session already active"
+                        $logEntry = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'),INITIAL_STATE,$($session.SessionName),$($session.Username),$($session.ID),$($session.State),$($session.ClientIP),$($session.ClientName),$($session.ClientBuild),$($session.IdleTime),Monitoring started - session already active"
                         $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8
                     }
                 }
@@ -238,7 +456,9 @@ function Get-CurrentRDPSessions {
                     Write-Host ")" -ForegroundColor Yellow
                     $separator = [string][char]0x2500
                     Write-Host ($separator * 42) -ForegroundColor DarkGreen
-                    $sessionObjects | Format-Table -AutoSize
+                    
+                    # Display sessions with extended properties
+                    $sessionObjects | Select-Object SessionName, Username, ID, State, ClientIP, ClientName, IdleTime, ClientBuild, ClientDisplay | Format-Table -AutoSize
             
                     # Show processes for specific session or all if requested
                     if ($ShowProcesses) {
@@ -305,10 +525,6 @@ function Get-CurrentRDPSessions {
                 else {
                     Write-Host "$(Get-Emoji 'warning') No active RDP sessions found." -ForegroundColor Yellow
                 }
-            }
-            else {
-                Write-Host "$(Get-Emoji 'cross') Unable to query sessions." -ForegroundColor Red
-            }
         }
         catch {
             Write-Error "Error getting session information: $_"
