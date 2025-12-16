@@ -310,15 +310,11 @@ function Get-CurrentRDPSessions {
             Clear-Host
         }
 
-        # ASCII Art Header
+        # ASCII Art Header - Use basic ASCII for PowerShell 5.1 compatibility
         Write-Host "`n" -NoNewline
-        $topLeft = [char]0x2554; $topRight = [char]0x2557; $bottomLeft = [char]0x255A; $bottomRight = [char]0x255D
-        $horizontal = [string][char]0x2550; $vertical = [char]0x2551
-        Write-Host "$topLeft$($horizontal * 51)$topRight" -ForegroundColor Green
-        Write-Host "$vertical" -ForegroundColor Green -NoNewline
-        Write-Host "     ACTIVE RDP SESSIONS MONITOR v1.0.8            " -ForegroundColor White -NoNewline
-        Write-Host "$vertical" -ForegroundColor Green
-        Write-Host "$bottomLeft$($horizontal * 51)$bottomRight" -ForegroundColor Green
+        Write-Host ("=" * 53) -ForegroundColor Green
+        Write-Host "     ACTIVE RDP SESSIONS MONITOR v1.0.8            " -ForegroundColor White
+        Write-Host ("=" * 53) -ForegroundColor Green
         Write-Host ""
         Write-Host "$(Get-Emoji 'computer') Computer: " -ForegroundColor Cyan -NoNewline
         Write-Host "$env:COMPUTERNAME" -ForegroundColor White
@@ -440,12 +436,11 @@ function Get-CurrentRDPSessions {
         
             if ($sessionObjects.Count -gt 0) {
                 Write-Host "`n" -NoNewline
-                Write-Host "──────────────────────────────────────────" -ForegroundColor DarkGreen
+                Write-Host ("-" * 80) -ForegroundColor DarkGreen
                 Write-Host "$(Get-Emoji 'user') ACTIVE SESSIONS (" -ForegroundColor Yellow -NoNewline
                 Write-Host "$($sessionObjects.Count)" -ForegroundColor White -NoNewline
                 Write-Host ")" -ForegroundColor Yellow
-                $separator = [string][char]0x2500
-                Write-Host ($separator * 42) -ForegroundColor DarkGreen
+                Write-Host ("-" * 80) -ForegroundColor DarkGreen
                     
                 # Display sessions with extended properties
                 $sessionObjects | Select-Object SessionName, Username, ID, State, ClientIP, ClientName, IdleTime, ClientBuild, ClientDisplay | Format-Table -AutoSize
@@ -484,9 +479,9 @@ function Get-CurrentRDPSessions {
             
                 # Get recent logon events for active users
                 Write-Host "`n" -NoNewline
-                Write-Host "──────────────────────────────────────────" -ForegroundColor DarkGreen
+                Write-Host ("-" * 80) -ForegroundColor DarkGreen
                 Write-Host "$(Get-Emoji 'chart') RECENT LOGON INFORMATION" -ForegroundColor Yellow
-                Write-Host "──────────────────────────────────────────" -ForegroundColor DarkGreen
+                Write-Host ("-" * 80) -ForegroundColor DarkGreen
                 foreach ($session in $sessionObjects | Where-Object { $_.Username -ne 'N/A' }) {
                     $recentLogon = Get-WinEvent -FilterHashtable @{
                         LogName = 'Security'
