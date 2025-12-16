@@ -81,9 +81,11 @@ function Get-CurrentRDPSessions {
     )
 
     # Win32 API Definitions for Windows Terminal Services (WTS)
-    Add-Type -TypeDefinition @"
-    using System;
-    using System.Runtime.InteropServices;
+    # Only add type if not already loaded
+    if (-not ([System.Management.Automation.PSTypeName]'WTSApi').Type) {
+        Add-Type -TypeDefinition @"
+        using System;
+        using System.Runtime.InteropServices;
     
     public enum WTS_CONNECTSTATE_CLASS
     {
@@ -180,7 +182,8 @@ function Get-CurrentRDPSessions {
         
         public static readonly IntPtr WTS_CURRENT_SERVER_HANDLE = IntPtr.Zero;
     }
-"@ -ErrorAction SilentlyContinue
+"@
+    }
 
     # Emoji support for both PowerShell 5.1 and 7.x
     function Get-Emoji {
