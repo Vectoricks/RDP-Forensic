@@ -443,7 +443,7 @@ function Get-CurrentRDPSessions {
                 Write-Host ("-" * 80) -ForegroundColor DarkGreen
                     
                 # Display sessions with extended properties
-                $sessionObjects | Select-Object SessionName, Username, ID, State, ClientIP, ClientName, IdleTime, ClientBuild, ClientDisplay | Format-Table -AutoSize
+                $sessionObjects | Select-Object SessionName, Username, ID, State, ClientIP, ClientName, ConnectTime, IdleTime, ClientBuild, ClientDisplay | Format-Table -AutoSize
             
                 # Show processes for specific session or all if requested
                 if ($ShowProcesses) {
