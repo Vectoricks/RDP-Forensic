@@ -15,6 +15,8 @@
 
 BeforeAll {
     $script:ScriptPath = Join-Path $PSScriptRoot ".." "Get-CurrentRDPSessions.ps1"
+    # Dot source the function
+    . $script:ScriptPath
 }
 
 Describe "Get-CurrentRDPSessions.ps1 - Script Validation" {
@@ -42,11 +44,43 @@ Describe "Get-CurrentRDPSessions.ps1 - Script Validation" {
     
     Context "Parameter Validation" {
         It "Should accept SessionID parameter" {
-            { & $script:ScriptPath -SessionID 1 -ErrorAction Stop } | Should -Not -Throw
+            { Get-CurrentRDPSessions -SessionID 1 -ErrorAction Stop } | Should -Not -Throw
         }
         
         It "Should accept ShowProcesses switch" {
-            { & $script:ScriptPath -ShowProcesses -ErrorAction Stop } | Should -Not -Throw
+            { Get-CurrentRDPSessions -ShowProcesses -ErrorAction Stop } | Should -Not -Throw
+        }
+
+        It "Should accept Watch switch" {
+            # Note: Can't actually test Watch mode as it runs indefinitely
+            # Testing parameter validation only
+            $params = (Get-Command Get-CurrentRDPSessions).Parameters
+            $params.ContainsKey('Watch') | Should -Be $true
+            $params['Watch'].SwitchParameter | Should -Be $true
+        }
+
+        It "Should accept RefreshInterval parameter" {
+            $params = (Get-Command Get-CurrentRDPSessions).Parameters
+            $params.ContainsKey('RefreshInterval') | Should -Be $true
+            $params['RefreshInterval'].ParameterType.Name | Should -Be 'Int32'
+        }
+
+        It "Should validate RefreshInterval range (1-300)" {
+            $params = (Get-Command Get-CurrentRDPSessions).Parameters
+            $validation = $params['RefreshInterval'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] }
+            $validation | Should -Not -BeNullOrEmpty
+            $validation.MinRange | Should -Be 1
+            $validation.MaxRange | Should -Be 300
+        }
+
+        It "Should have RefreshInterval default value of 5" {
+            $params = (Get-Command Get-CurrentRDPSessions).Parameters
+            $defaultValue = $params['RefreshInterval'].Attributes | Where-Object { $_.GetType().Name -eq 'PSDefaultValueAttribute' }
+            # Alternative: check the actual default by examining the parameter metadata
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:ScriptPath, [ref]$null, [ref]$null)
+            $paramBlock = $ast.FindAll({ $args[0] -is [System.Management.Automation.Language.ParameterAst] }, $true) | 
+                Where-Object { $_.Name.VariablePath.UserPath -eq 'RefreshInterval' }
+            $paramBlock.DefaultValue.Value | Should -Be 5
         }
     }
 }
@@ -59,13 +93,13 @@ Describe "Get-CurrentRDPSessions.ps1 - Functionality" {
         }
         
         It "Should query sessions without error" {
-            { & $script:ScriptPath -ErrorAction Stop } | Should -Not -Throw
+            { Get-CurrentRDPSessions -ErrorAction Stop } | Should -Not -Throw
         }
     }
     
     Context "Process Query" {
         It "Should query processes with ShowProcesses switch" {
-            { & $script:ScriptPath -ShowProcesses -ErrorAction Stop } | Should -Not -Throw
+            { Get-CurrentRDPSessions -ShowProcesses -ErrorAction Stop } | Should -Not -Throw
         }
     }
 }
@@ -74,7 +108,7 @@ Describe "Get-CurrentRDPSessions.ps1 - Error Handling" {
     
     Context "Invalid Session ID" {
         It "Should handle non-existent session ID gracefully" {
-            { & $script:ScriptPath -SessionID 99999 -ErrorAction SilentlyContinue } | Should -Not -Throw
+            { Get-CurrentRDPSessions -SessionID 99999 -ErrorAction SilentlyContinue } | Should -Not -Throw
         }
     }
 }
