@@ -353,7 +353,8 @@ function Get-CurrentRDPSessions {
                     $state = $sessionInfo.State.ToString()
                     
                     # Only include RDP sessions (exclude console, services, listeners)
-                    if ($sessionName -match 'rdp-tcp#\d+' -and $state -ne 'WTSListen') {
+                    # Match both lowercase and uppercase variations: rdp-tcp or RDP-Tcp
+                    if ($sessionName -match 'rdp-tcp#\d+|RDP-Tcp#\d+' -and $state -ne 'WTSListen') {
                         # Query extended session information
                         $username = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSUserName)
                         $clientName = Get-WTSSessionInfo -SessionId $sessionInfo.SessionId -InfoClass ([WTS_INFO_CLASS]::WTSClientName)
