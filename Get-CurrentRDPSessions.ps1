@@ -355,7 +355,8 @@ function Get-CurrentRDPSessions {
                             # Filter out invalid client names (empty, whitespace, or non-ASCII junk)
                             if ($clientName -and $clientName.Trim() -ne '' -and $clientName -match '^[\x20-\x7E]+$') {
                                 $clientName = $clientName.Trim()
-                            } else {
+                            }
+                            else {
                                 $clientName = $null
                             }
                             $clientIP = Get-WTSSessionInfo -SessionId $id -InfoClass ([WTS_INFO_CLASS]::WTSClientAddress)
