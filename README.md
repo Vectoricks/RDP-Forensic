@@ -177,6 +177,9 @@ Get-RDPForensics -GroupBySession
 # **NEW v1.0.4** - Analyze complete session lifecycles with export
 Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports\RDP"
 
+# **NEW v1.0.6** - Include NTLM credential validation (4776) with time-based correlation
+Get-RDPForensics -IncludeCredentialValidation -GroupBySession
+
 # Include outbound RDP connections
 Get-RDPForensics -IncludeOutbound
 
@@ -213,11 +216,12 @@ Get-RDPForensics -Username "admin" -GroupBySession -StartDate (Get-Date).AddMont
 ```
 
 **Session Correlation Features:**
-- **Automatic Event Grouping** - Links events across Security, TerminalServices, and System logs using LogonID/SessionID
+- **Automatic Event Grouping** - Links events across Security, TerminalServices, and System logs using ActivityID/LogonID/SessionID
 - **Complete Lifecycle Visualization** - Shows which stages completed: Connection → Auth → Logon → Active → Disconnect → Logoff
 - **Duration Calculation** - Accurate session time from first event to last
 - **Anomaly Detection** - Identifies incomplete sessions (e.g., logon without logoff)
 - **Dual Export** - Saves both raw events AND session summaries to CSV
+- **Optional Credential Validation (NEW v1.0.6)** - Include EventID 4776 (NTLM auth) with time-based correlation for pre-session authentication tracking
 
 **Advanced Forensic Filtering Examples:**
 

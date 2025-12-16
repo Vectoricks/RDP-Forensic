@@ -39,14 +39,24 @@ Describe "Get-RDPForensics Session Correlation Tests" {
             $functionContent | Should -Match '\$sessionMap\s*=\s*@\{\}'
         }
         
-        It "Should track LogonID as correlation key" {
+        It "Should track ActivityID as correlation key (Priority 1)" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'ActivityID:'
+        }
+        
+        It "Should track LogonID as correlation key (Priority 2)" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
             $functionContent | Should -Match 'LogonID:'
         }
         
-        It "Should track SessionID as correlation key" {
+        It "Should track SessionID as correlation key (Priority 3)" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
             $functionContent | Should -Match 'SessionID:'
+        }
+        
+        It "Should prioritize ActivityID over LogonID" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'Priority 1.*ActivityID'
         }
     }
     
@@ -59,6 +69,11 @@ Describe "Get-RDPForensics Session Correlation Tests" {
         It "Should track Authentication stage" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
             $functionContent | Should -Match 'Authentication'
+        }
+        
+        It "Should track EventID 4776 in Authentication stage" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match '4624.*4776.*Authentication'
         }
         
         It "Should track Logon stage" {
@@ -109,6 +124,28 @@ Describe "Get-RDPForensics Session Correlation Tests" {
             $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
             # Complete lifecycle requires ConnectionAttempt, Logon, and Logoff at minimum
             $functionContent | Should -Match '\$session\.ConnectionAttempt.*and.*\$session\.Logon'
+        }
+    }
+    
+    Context "Time-Based Correlation for EventID 4776" {
+        It "Should contain time-based correlation logic for 4776" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'Time-based correlation.*4776'
+        }
+        
+        It "Should match 4776 events within time window" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'TotalSeconds.*-ge.*0.*-and.*TotalSeconds.*-le'
+        }
+        
+        It "Should match by username for time-based correlation" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'User.*-eq.*User'
+        }
+        
+        It "Should add 4776 events to matched sessions" {
+            $functionContent = Get-Content "$ModulePath\Get-RDPForensics.ps1" -Raw
+            $functionContent | Should -Match 'sessionMap.*Events.*\+=.*credEvent'
         }
     }
     

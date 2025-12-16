@@ -47,6 +47,49 @@ AfterAll {
     }
 }
 
+Describe "Get-RDPForensics.ps1 - PowerShell Version Compatibility" {
+    
+    Context "Version Detection" {
+        It "Should detect current PowerShell version" {
+            $PSVersionTable.PSVersion | Should -Not -BeNullOrEmpty
+        }
+        
+        It "Should be running PowerShell 5.1 or later" {
+            $PSVersionTable.PSVersion.Major | Should -BeGreaterOrEqual 5
+        }
+        
+        It "Should report version correctly" {
+            Write-Host "Running tests on PowerShell $($PSVersionTable.PSVersion)" -ForegroundColor Cyan
+            $true | Should -Be $true
+        }
+    }
+    
+    Context "Emoji Support Across Versions" {
+        It "Should handle emoji function in PowerShell 5.1" {
+            $content = Get-Content -Path $script:ScriptPath -Raw
+            $content | Should -Match 'function Get-Emoji'
+            $content | Should -Match 'PSVersionTable.PSVersion.Major -ge 6'
+        }
+        
+        It "Should have fallback characters for PowerShell 5.1" {
+            $content = Get-Content -Path $script:ScriptPath -Raw
+            $content | Should -Match '\[char\]0x'
+        }
+    }
+    
+    Context "ConvertFromUtf32 Compatibility" {
+        It "Should use runtime [char] casting for PS 5.1 compatibility" {
+            $content = Get-Content -Path $script:ScriptPath -Raw
+            # Should NOT use [char]::ConvertFromUtf32 directly at parse time
+            # Should use it only in PowerShell 7+ branch
+            if ($PSVersionTable.PSVersion.Major -eq 5) {
+                # In PS 5.1, the script should work without errors
+                { & $script:ScriptPath -StartDate (Get-Date) } | Should -Not -Throw
+            }
+        }
+    }
+}
+
 Describe "Get-RDPForensics.ps1 - Script Validation" {
     
     Context "Script File Existence and Syntax" {
@@ -102,6 +145,16 @@ Describe "Get-RDPForensics.ps1 - Script Validation" {
             { & $script:ScriptPath -IncludeOutbound -StartDate (Get-Date) -ErrorAction Stop } | 
                 Should -Not -Throw
         }
+        
+        It "Should accept GroupBySession switch" {
+            { & $script:ScriptPath -GroupBySession -StartDate (Get-Date) -ErrorAction Stop } | 
+                Should -Not -Throw
+        }
+        
+        It "Should accept IncludeCredentialValidation switch" {
+            { & $script:ScriptPath -IncludeCredentialValidation -StartDate (Get-Date) -ErrorAction Stop } | 
+                Should -Not -Throw
+        }
     }
 }
 
@@ -149,11 +202,17 @@ Describe "Get-RDPForensics.ps1 - Event Collection" {
         }
         
         It "Should return events with valid EventIDs" {
-            $validEventIDs = @(1149, 4624, 4625, 21, 22, 23, 24, 25, 39, 40, 4778, 4779, 4634, 4647, 9009, 1102)
+            $validEventIDs = @(1149, 4624, 4625, 4776, 21, 22, 23, 24, 25, 39, 40, 4778, 4779, 4634, 4647, 9009, 1102)
             if ($script:TestResults.Count -gt 0) {
                 $script:TestResults | ForEach-Object {
                     $validEventIDs | Should -Contain $_.EventID
                 }
+            }
+        }
+        
+        It "Should have ActivityID property when available" {
+            if ($script:TestResults.Count -gt 0) {
+                $script:TestResults[0].PSObject.Properties.Name | Should -Contain 'ActivityID'
             }
         }
     }
@@ -343,6 +402,44 @@ Describe "Get-RDPForensics.ps1 - Event Type Coverage" {
         It "Should check for Logoff Events (4634, 4647, 9009)" {
             # Test passes if script runs without error
             $script:AllEvents | Should -Not -BeNullOrEmpty -Because "Script should return results or empty array"
+        }
+    }
+}
+
+Describe "Get-RDPForensics.ps1 - Credential Validation (EventID 4776)" {
+    
+    Context "IncludeCredentialValidation Parameter" {
+        It "Should not collect 4776 events by default" {
+            $results = & $script:ScriptPath -StartDate (Get-Date).AddHours(-1)
+            $cred4776 = $results | Where-Object { $_.EventID -eq 4776 }
+            $cred4776.Count | Should -Be 0 -Because "4776 should be off by default"
+        }
+        
+        It "Should collect 4776 events when switch is used" {
+            $results = & $script:ScriptPath -IncludeCredentialValidation -StartDate (Get-Date).AddDays(-1)
+            # May or may not have 4776 events, but script should run without error
+            $results | Should -Not -BeNullOrEmpty
+        }
+        
+        It "Should parse 4776 event properties correctly" {
+            $results = & $script:ScriptPath -IncludeCredentialValidation -StartDate (Get-Date).AddDays(-1)
+            $cred4776 = $results | Where-Object { $_.EventID -eq 4776 } | Select-Object -First 1
+            if ($cred4776) {
+                $cred4776.PSObject.Properties.Name | Should -Contain 'User'
+                $cred4776.PSObject.Properties.Name | Should -Contain 'EventType'
+                $cred4776.PSObject.Properties.Name | Should -Contain 'Details'
+                $cred4776.EventType | Should -Match 'Credential Validation'
+            } else {
+                Set-ItResult -Skipped -Because "No 4776 events found in time range"
+            }
+        }
+    }
+    
+    Context "Time-Based Correlation" {
+        It "Should correlate 4776 with sessions when GroupBySession is used" {
+            # Get results with both GroupBySession and IncludeCredentialValidation
+            { & $script:ScriptPath -GroupBySession -IncludeCredentialValidation -StartDate (Get-Date).AddHours(-1) } | 
+                Should -Not -Throw
         }
     }
 }

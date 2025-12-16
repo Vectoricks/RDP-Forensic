@@ -11,6 +11,7 @@ CONNECTION ATTEMPTS
 AUTHENTICATION
 ├─ 4624: Successful logon (Security)
 ├─ 4625: Failed logon (Security)
+├─ 4776: NTLM credential validation (Security) - Optional
 
 SESSION LIFECYCLE
 ├─ 21: Session logon succeeded (LocalSessionManager)
@@ -63,6 +64,15 @@ Get-EventLog security -after (Get-date -hour 0 -minute 0 -second 0) | Where-Obje
 ### Get Failed RDP Attempts (Brute Force Detection)
 ```powershell
 Get-EventLog security -after (Get-date).AddHours(-24) | Where-Object {$_.eventid -eq 4625 -and $_.Message -match 'logon type:\s+(10)\s'} | Group-Object @{E={$_.ReplacementStrings[19]}} | Sort-Object Count -Descending
+```
+
+### Get NTLM Credential Validation Events (NEW v1.0.6)
+```powershell
+# Using toolkit with time-based correlation
+.\Get-RDPForensics.ps1 -IncludeCredentialValidation -GroupBySession
+
+# Direct event query
+Get-WinEvent -LogName Security -FilterXPath '*[System[EventID=4776]]' | ForEach-Object { [xml]$xml=$_.ToXml(); [PSCustomObject]@{Time=$_.TimeCreated; User=$xml.Event.EventData.Data[0].'#text'; Workstation=$xml.Event.EventData.Data[1].'#text'; ErrorCode=$xml.Event.EventData.Data[2].'#text'}}
 ```
 
 ### Get RDP Connection Attempts with User Info

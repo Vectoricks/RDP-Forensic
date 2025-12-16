@@ -39,6 +39,12 @@ function Get-RDPForensics {
     Displays session summary with duration, lifecycle stages, and completeness indicators.
     Exports to separate CSV file (RDP_Sessions_<timestamp>.csv) when used with -ExportPath.
 
+.PARAMETER IncludeCredentialValidation
+    Include EventID 4776 (NTLM Credential Validation) events in the analysis.
+    These events occur before RDP session creation and may not correlate via ActivityID.
+    Uses time-based correlation (username + timestamp proximity) to associate with sessions.
+    Useful for tracking authentication attempts, failed logins, and potential brute-force attacks.
+
 .EXAMPLE
     Get-RDPForensics
     Get all RDP events for today.
@@ -58,6 +64,10 @@ function Get-RDPForensics {
 .EXAMPLE
     Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession -ExportPath "C:\Reports"
     Analyze last 7 days of sessions and export both events and session summaries.
+
+.EXAMPLE
+    Get-RDPForensics -IncludeCredentialValidation -GroupBySession
+    Include NTLM credential validation events (4776) with time-based correlation to RDP sessions.
 
 .NOTES
     Author: Jan Tiedemann
@@ -87,7 +97,10 @@ function Get-RDPForensics {
         [switch]$IncludeOutbound,
 
         [Parameter()]
-        [switch]$GroupBySession
+        [switch]$GroupBySession,
+
+        [Parameter()]
+        [switch]$IncludeCredentialValidation
     )
 
     # Error handling preference
@@ -211,6 +224,38 @@ function Get-RDPForensics {
                 if ($event.SourceIP -and $event.SourceIP -ne 'N/A' -and $event.SourceIP -ne '-' -and $event.SourceIP -ne 'LOCAL') {
                     $sessionMap[$correlationKey].SourceIP = $event.SourceIP
                 }
+            }
+        }
+        
+        # Time-based correlation for 4776 events (credential validation happens before session creation)
+        # Match 4776 events to sessions within 10 seconds before session start with matching username
+        $uncorrelated4776 = $Events | Where-Object { $_.EventID -eq 4776 -and -not $_.CorrelationKey }
+        
+        foreach ($credEvent in $uncorrelated4776) {
+            $matchedSession = $null
+            $closestTimeDiff = [TimeSpan]::MaxValue
+            
+            # Find the closest session that starts within 10 seconds after this 4776 event with same user
+            foreach ($sessionKey in $sessionMap.Keys) {
+                $session = $sessionMap[$sessionKey]
+                if ($session.User -eq $credEvent.User) {
+                    $sessionStart = ($session.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
+                    $timeDiff = $sessionStart - $credEvent.TimeCreated
+                    
+                    # 4776 should be 0-10 seconds BEFORE session start
+                    if ($timeDiff.TotalSeconds -ge 0 -and $timeDiff.TotalSeconds -le 10) {
+                        if ($timeDiff -lt $closestTimeDiff) {
+                            $closestTimeDiff = $timeDiff
+                            $matchedSession = $sessionKey
+                        }
+                    }
+                }
+            }
+            
+            # Add 4776 event to matched session
+            if ($matchedSession) {
+                $sessionMap[$matchedSession].Events += $credEvent
+                $sessionMap[$matchedSession].Lifecycle.Authentication = $true
             }
         }
         
@@ -338,9 +383,14 @@ function Get-RDPForensics {
 
     # Function to parse EventID 4624, 4625, 4776 - Authentication Events
     function Get-RDPAuthenticationEvents {
-        param([DateTime]$Start, [DateTime]$End)
+        param(
+            [DateTime]$Start, 
+            [DateTime]$End,
+            [bool]$Include4776 = $false
+        )
     
-        Write-Host "$(Get-Emoji 'key') [2/6] Collecting RDP Authentication Events (EventID 4624, 4625, 4776)..." -ForegroundColor Yellow
+        $eventList = if ($Include4776) { "4624, 4625, 4776" } else { "4624, 4625" }
+        Write-Host "$(Get-Emoji 'key') [2/6] Collecting RDP Authentication Events (EventID $eventList)..." -ForegroundColor Yellow
     
         try {
             # Collect logon events (4624/4625) and credential validation events (4776)
@@ -354,13 +404,21 @@ function Get-RDPForensics {
                 $_.Message -match 'Logon Type:\s+(10|7|3|5)\s'
             }
             
-            # Collect NTLM credential validation events (4776)
-            $credentialEvents = Get-WinEvent -FilterHashtable @{
-                LogName   = 'Security'
-                Id        = 4776
-                StartTime = $Start
-                EndTime   = $End
-            } -ErrorAction SilentlyContinue
+            # Optionally collect NTLM credential validation events (4776)
+            $credentialEvents = @()
+            if ($Include4776) {
+                $credentialEvents = Get-WinEvent -FilterHashtable @{
+                    LogName   = 'Security'
+                    Id        = 4776
+                    StartTime = $Start
+                    EndTime   = $End
+                } -ErrorAction SilentlyContinue | Where-Object {
+                    # Include events where Source Workstation is not empty and not local machine
+                    # (4776 fires for all NTLM auth, we want remote/RDP-related ones)
+                    $_.Message -match 'Source Workstation:\s+\S+' -and 
+                    $_.Message -notmatch 'Source Workstation:\s+(LOCAL|LOCALHOST|127\.0\.0\.1|-)'
+                }
+            }
             
             # Combine both event types
             $events = @($logonEvents) + @($credentialEvents)
@@ -772,7 +830,7 @@ function Get-RDPForensics {
     # Collect all events
     $allEvents = @()
     $allEvents += Get-RDPConnectionAttempts -Start $StartDate -End $EndDate
-    $allEvents += Get-RDPAuthenticationEvents -Start $StartDate -End $EndDate
+    $allEvents += Get-RDPAuthenticationEvents -Start $StartDate -End $EndDate -Include4776 $IncludeCredentialValidation.IsPresent
     $allEvents += Get-RDPSessionEvents -Start $StartDate -End $EndDate
     $allEvents += Get-RDPSessionReconnectEvents -Start $StartDate -End $EndDate
     $allEvents += Get-RDPLogoffEvents -Start $StartDate -End $EndDate

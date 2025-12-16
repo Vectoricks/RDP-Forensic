@@ -1,14 +1,23 @@
 # Release Notes - RDP-Forensic v1.0.6
 
-**Release Date:** December 16, 2025
+**Release Date:** December 16, 2025  
+**Updated:** December 16, 2025 (Added -IncludeCredentialValidation switch)
 
 ## 🎯 Overview
 
-Version 1.0.6 adds **EventID 4776 (Credential Validation)** to authentication tracking, providing earlier detection of RDP connection attempts and enhanced brute force attack detection capabilities.
+Version 1.0.6 adds **optional EventID 4776 (Credential Validation)** tracking to authentication analysis. This enhancement provides earlier detection of RDP connection attempts and enhanced brute force attack detection capabilities through an optional switch parameter.
 
 ---
 
 ## ✨ New Features
+
+### -IncludeCredentialValidation Switch Parameter
+
+**New Optional Parameter:**
+- Use `-IncludeCredentialValidation` to include EventID 4776 events
+- **Off by default** to maintain performance and reduce noise
+- Uses **time-based correlation** for accurate session matching
+- Filters to remote authentication only (excludes localhost/local machine)
 
 ### EventID 4776 - Credential Validation Tracking
 
@@ -19,7 +28,13 @@ Version 1.0.6 adds **EventID 4776 (Credential Validation)** to authentication tr
 - Shows authentication package used (NTLM vs Kerberos)
 - Provides Error Code: 0x0 = success, other = failure reason
 
-**Benefits:**
+**Why Optional?**
+- ⚠️ **ActivityID may not correlate** - 4776 occurs at NTLM layer, not RDP session layer
+- 🎯 **Time-based matching** - Correlates by username + timestamp proximity (0-10 seconds before session)
+- 🔍 **Specialized use case** - Most valuable for brute force detection and pre-session authentication tracking
+- ⚡ **Performance** - Reduces query load for standard RDP forensics
+
+**Benefits When Enabled:**
 - ✅ **Earlier Detection** - Captures authentication phase before logon
 - ✅ **Brute Force Detection** - Shows repeated failed credential validation attempts
 - ✅ **Authentication Protocol Visibility** - Identifies NTLM vs Kerberos usage
@@ -41,9 +56,10 @@ Authentication Package: NTLM
 ### Enhanced Authentication Collection
 
 **Updated Function:**
-- `Get-RDPAuthenticationEvents` now collects EventID 4624, 4625, **and 4776**
-- Parses both logon events and credential validation events
-- Maintains ActivityID correlation for all event types
+- `Get-RDPAuthenticationEvents` now optionally collects EventID 4776 (when `-IncludeCredentialValidation` is used)
+- Always collects EventID 4624, 4625 (logon events)
+- Parses both logon events and credential validation events with conditional logic
+- Maintains ActivityID correlation for RDP events; uses time-based correlation for 4776
 - Provides detailed error code information for failed validations
 
 **Event Types Added:**
@@ -60,11 +76,25 @@ Authentication Package: NTLM
 
 ## 📊 Usage Examples
 
+### Standard Usage (Default - No 4776)
+
+```powershell
+# Normal RDP forensics without credential validation tracking
+Get-RDPForensics -StartDate (Get-Date).AddDays(-7) -GroupBySession
+```
+
+### With Credential Validation (Optional)
+
+```powershell
+# Include 4776 events with time-based correlation
+Get-RDPForensics -IncludeCredentialValidation -GroupBySession
+```
+
 ### Detect Brute Force Attempts
 
 ```powershell
 # Collect all authentication events including credential validation
-$events = Get-RDPForensics -StartDate (Get-Date).AddHours(-24)
+$events = Get-RDPForensics -IncludeCredentialValidation -StartDate (Get-Date).AddHours(-24)
 
 # Filter for failed credential validation
 $events | Where-Object { 
@@ -75,8 +105,8 @@ $events | Where-Object {
 ### Authentication Timeline Analysis
 
 ```powershell
-# View complete authentication sequence
-Get-RDPForensics -Username "administrator" -GroupBySession | 
+# View complete authentication sequence with credential validation
+Get-RDPForensics -Username "administrator" -IncludeCredentialValidation -GroupBySession | 
     ForEach-Object { 
         $_.Events | Where-Object { $_.EventID -in 4776, 4624, 4625 } | 
         Sort-Object TimeCreated 
@@ -92,9 +122,20 @@ Get-RDPForensics -Username "administrator" -GroupBySession |
 
 ```powershell
 # Check which authentication method was used
-Get-RDPForensics -StartDate (Get-Date).AddDays(-1) | 
+Get-RDPForensics -IncludeCredentialValidation -StartDate (Get-Date).AddDays(-1) | 
     Where-Object { $_.EventID -eq 4776 } | 
     Select-Object TimeCreated, User, Details
+```
+
+### Session Correlation
+
+```powershell
+# Time-based correlation example - 4776 matched to sessions within 10 seconds
+$sessions = Get-RDPForensics -IncludeCredentialValidation -GroupBySession -StartDate (Get-Date).AddHours(-2)
+$sessions | ForEach-Object {
+    Write-Host "Session: $($_.User) from $($_.SourceIP)"
+    $_.Events | Sort-Object TimeCreated | Select-Object TimeCreated, EventID, EventType
+}
 ```
 
 ---
@@ -192,7 +233,8 @@ Enable: Success and Failure
 
 4. **Test Collection:**
    ```powershell
-   Get-RDPForensics -StartDate (Get-Date).AddHours(-1) | 
+   # Test with credential validation enabled
+   Get-RDPForensics -IncludeCredentialValidation -StartDate (Get-Date).AddHours(-1) | 
        Where-Object { $_.EventID -eq 4776 }
    ```
 
@@ -206,7 +248,7 @@ EventID 4776 is critical for detecting password spray and brute force attacks:
 
 ```powershell
 # Detect multiple failed validations from same source
-Get-RDPForensics -StartDate (Get-Date).AddDays(-1) | 
+Get-RDPForensics -IncludeCredentialValidation -StartDate (Get-Date).AddDays(-1) | 
     Where-Object { $_.EventID -eq 4776 -and $_.Details -notmatch '0x0' } |
     Group-Object User, Details |
     Where-Object { $_.Count -gt 5 } |
@@ -219,7 +261,7 @@ Get-RDPForensics -StartDate (Get-Date).AddDays(-1) |
 
 ```powershell
 # Find locked accounts from credential validation failures
-Get-RDPForensics -StartDate (Get-Date).AddHours(-1) |
+Get-RDPForensics -IncludeCredentialValidation -StartDate (Get-Date).AddHours(-1) |
     Where-Object { $_.EventID -eq 4776 -and $_.Details -match '0xC0000234' }
 ```
 

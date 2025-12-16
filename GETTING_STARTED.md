@@ -76,6 +76,16 @@ $events = .\Get-RDPForensics.ps1 -StartDate (Get-Date).AddDays(-1)
 $events | Where-Object {$_.EventID -eq 4625} | Group-Object SourceIP | Sort-Object Count -Descending
 ```
 
+### Include Credential Validation Events (NEW v1.0.6)
+```powershell
+# Track NTLM authentication attempts with time-based correlation
+.\Get-RDPForensics.ps1 -IncludeCredentialValidation -GroupBySession
+
+# Find failed credential validations (potential brute force)
+$events = .\Get-RDPForensics.ps1 -IncludeCredentialValidation -StartDate (Get-Date).AddDays(-1)
+$events | Where-Object {$_.EventType -match 'Credential Validation Failed'} | Group-Object User, SourceIP
+```
+
 ## What Events Are Tracked
 
 The toolkit monitors the complete RDP connection lifecycle:
@@ -86,6 +96,7 @@ The toolkit monitors the complete RDP connection lifecycle:
 **Authentication Stage:**
 - EventID 4624: Successful logons
 - EventID 4625: Failed logons (brute force indicator)
+- EventID 4776: NTLM credential validation (optional with -IncludeCredentialValidation)
 
 **Session Stage:**
 - EventID 21: Session logon
@@ -171,6 +182,7 @@ auditpol /get /category:"Logon/Logoff"
 3. Enable:
    - Audit Logon Events → Success, Failure
    - Audit Account Logon Events → Success, Failure
+   - Audit Credential Validation → Success, Failure (for EventID 4776)
 
 **For domain environments**, configure via Group Policy:
 ```

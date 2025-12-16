@@ -65,6 +65,8 @@ if (-not $pesterModule) {
 }
 
 Write-Host "Pester Version: $($pesterModule.Version)" -ForegroundColor Gray
+Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)" -ForegroundColor Gray
+Write-Host "Edition: $($PSVersionTable.PSEdition)" -ForegroundColor Gray
 Write-Host "Tests Location: $TestsPath" -ForegroundColor Gray
 Write-Host "Report Location: $ReportPath`n" -ForegroundColor Gray
 

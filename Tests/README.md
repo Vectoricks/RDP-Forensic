@@ -35,9 +35,11 @@ Get-Module -Name Pester -ListAvailable
 
 | File | Description | Tests |
 |------|-------------|-------|
-| `Get-RDPForensics.Tests.ps1` | Main script unit tests | 40+ |
+| `Get-RDPForensics.Tests.ps1` | Main script unit tests | 50+ |
+| `Get-RDPForensics.Correlation.Tests.ps1` | Session correlation & ActivityID tests | 25+ |
 | `Get-CurrentRDPSessions.Tests.ps1` | Session monitoring tests | 10+ |
 | `Integration.Tests.ps1` | End-to-end workflow tests | 15+ |
+| `PowerShellVersion.Tests.ps1` | **NEW** PS 5.1/7+ compatibility tests | 40+ |
 | `RunAllTests.ps1` | Master test runner | - |
 
 ## Running Tests
@@ -142,6 +144,35 @@ Invoke-Pester -Path . -FullNameFilter "*Export*" -Output Detailed
 - Edge case scenarios
 - Graceful failure modes
 
+### 8. Session Correlation Tests (NEW v1.0.5+)
+- ActivityID-based correlation (Priority 1)
+- LogonID-based correlation (Priority 2)
+- SessionID-based correlation (Priority 3)
+- Lifecycle stage tracking (6 stages)
+- Session duration calculation
+- Completeness detection
+- GroupBySession display output
+- Sessions CSV export
+
+### 9. Credential Validation Tests (NEW v1.0.6+)
+- EventID 4776 collection (optional)
+- IncludeCredentialValidation parameter
+- Time-based correlation (0-10 second window)
+- Username matching for correlation
+- Remote-only filtering
+- Credential validation event parsing
+- Error code interpretation
+
+### 10. PowerShell Version Compatibility Tests (NEW v1.0.6+)
+- PowerShell 5.1 execution
+- PowerShell 7+ execution
+- Emoji/character rendering across versions
+- ConvertFromUtf32 compatibility
+- Get-WinEvent syntax compatibility
+- Switch parameter handling
+- CSV export UTF-8 encoding
+- Module import on both versions
+
 ## Test Results
 
 ### Output Location
@@ -161,6 +192,37 @@ TestResults/
 - ✅ **Passed** - Test completed successfully
 - ❌ **Failed** - Test did not meet expectations
 - ⚠️ **Skipped** - Test not applicable (e.g., no RDP events exist)
+
+### Testing on Multiple PowerShell Versions
+
+**Important:** The toolkit supports both PowerShell 5.1 and 7+. Run tests on BOTH versions:
+
+**PowerShell 5.1 (Windows PowerShell):**
+```powershell
+# Run from Windows PowerShell console
+powershell.exe
+cd Tests
+.\RunAllTests.ps1
+```
+
+**PowerShell 7+ (PowerShell Core):**
+```powershell
+# Run from PowerShell 7+ console
+pwsh.exe
+cd Tests
+.\RunAllTests.ps1
+```
+
+**Version-Specific Tests:**
+```powershell
+# Run only PowerShell compatibility tests
+Invoke-Pester -Path .\PowerShellVersion.Tests.ps1 -Output Detailed
+```
+
+**Expected Differences:**
+- PowerShell 5.1 uses fallback characters (□, ○, ×) instead of emojis
+- PowerShell 7+ displays full Unicode emoji support
+- Both versions should pass all functional tests
 
 **Code Coverage Targets:**
 - 🟢 **70%+** - Excellent coverage
