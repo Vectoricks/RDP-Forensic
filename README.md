@@ -61,11 +61,12 @@ This is the **only comprehensive, open-source PowerShell-native RDP forensics so
 This toolkit provides detailed analysis of RDP connections across all connection stages:
 
 1. **Network Connection** - Initial RDP connection attempts (EventID 1149)
-2. **Authentication** - Successful and failed authentication (EventID 4624, 4625)
-3. **Logon** - Session establishment (EventID 21, 22)
-4. **Lock/Unlock** - Workstation lock state changes (EventID 4800, 4801)
-5. **Disconnect/Reconnect** - Session state changes (EventID 24, 25, 39, 40, 4778, 4779)
-6. **Logoff** - Session termination (EventID 23, 4634, 4647, 9009)
+2. **Credential Submission** - Explicit credential usage (EventID 4648) - NEW in v1.0.8
+3. **Authentication** - Successful and failed authentication (EventID 4624, 4625)
+4. **Logon** - Session establishment (EventID 21, 22)
+5. **Lock/Unlock** - Workstation lock state changes (EventID 4800, 4801)
+6. **Disconnect/Reconnect** - Session state changes (EventID 24, 25, 39, 40, 4778, 4779)
+7. **Logoff** - Session termination (EventID 23, 4634, 4647, 9009)
 
 ## Scripts
 
@@ -371,16 +372,23 @@ Get-RDPForensics -GroupBySession -LogonID $suspiciousLogonID -ExportPath "C:\Inv
 
 ### Get-CurrentRDPSessions.ps1
 
-Quick analysis script for viewing currently active RDP sessions.
+Real-time RDP session monitoring with comprehensive forensic properties.
 
 **Features:**
-- Shows active RDP sessions with user information
+- **Extended session properties** via Win32 API (WTS) integration
+- Shows ClientIP, ClientName, ClientBuild, ClientDisplay resolution
+- **ConnectTime** with multi-source event correlation:
+  * Security Events: 4778 (reconnection), 4624 (initial logon)
+  * Terminal Services Events: 25 (reconnection), 21/22 (session logon)
+  * Automatically uses most recent event across all sources
+  * Works with or without Security audit policies enabled
 - Displays session states (Active/Disconnected)
 - Lists running processes per session
 - Shows recent logon information for active users
 - **Auto-refresh monitoring mode** for real-time session tracking
 - Customizable refresh intervals (1-300 seconds)
 - **Change logging** - Records session changes to CSV for forensic analysis
+- IdleTime tracking (shows user inactivity duration when available)
 
 **Usage Examples:**
 
@@ -444,6 +452,22 @@ Timestamp,EventType,SessionName,Username,SessionID,State,SourceIP,Details
 2025-12-16 09:45:10,STATE_CHANGE,rdp-tcp#2,john.doe,3,Disc,,State changed from Active to Disc
 2025-12-16 10:02:45,SESSION_ENDED,rdp-tcp#2,john.doe,3,Disc,,Session ended or disconnected
 ```
+
+**Extended Properties (v1.0.8):**
+
+The tool now displays comprehensive session information:
+- **ClientIP** - Source IP address of RDP connection
+- **ClientName** - Computer name of connecting client
+- **ClientBuild** - Windows build number of client OS
+- **ClientDisplay** - Screen resolution and color depth (e.g., "2048x1152 (32bit)")
+- **ConnectTime** - Most recent connection timestamp (uses multi-source event correlation)
+- **IdleTime** - User inactivity duration
+
+> ⚠️ **IdleTime Limitation:** This property often shows "N/A" because:
+> - WTS API only provides meaningful data when user has **stopped** interacting
+> - Returns null/0 for actively used sessions (typing, mouse movement)
+> - May not be available for disconnected sessions
+> - Most useful in watch mode for detecting inactive sessions
 
 > **Note:** Import the module first with `Import-Module .\RDP-Forensic.psm1` to use these commands directly.
 
