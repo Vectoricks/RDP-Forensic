@@ -769,13 +769,15 @@ function Get-RDPForensics {
                             # Construct usernames
                             if ($subjectDomain -ne 'N/A' -and $subjectDomain -ne '-' -and $subjectUserName -ne 'N/A') {
                                 $subjectFullName = "$subjectDomain\$subjectUserName"
-                            } else {
+                            }
+                            else {
                                 $subjectFullName = $subjectUserName
                             }
                             
                             if ($targetDomain -ne 'N/A' -and $targetDomain -ne '-' -and $targetUserName -ne 'N/A') {
                                 $targetFullName = "$targetDomain\$targetUserName"
-                            } else {
+                            }
+                            else {
                                 $targetFullName = $targetUserName
                             }
                             
