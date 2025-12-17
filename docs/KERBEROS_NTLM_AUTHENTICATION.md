@@ -415,4 +415,4 @@ Use this feature when you need to understand not just **what** happened in an RD
 - [README.md](README.md) - Main documentation
 - [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Command reference
 - [GETTING_STARTED.md](GETTING_STARTED.md) - Tutorial
-- [RELEASE_NOTES_v1.0.6.md](RELEASE_NOTES_v1.0.6.md) - Version details
+- [Release Notes v1.0.6](releases/v1.0.6.md) - Version details

@@ -708,13 +708,29 @@ For large environments with extensive logs:
 - [Microsoft: Audit logon events](https://docs.microsoft.com/en-us/windows/security/threat-protection/auditing/basic-audit-logon-events)
 - [Microsoft: Remote Desktop Services event logs Troubeshooting](https://learn.microsoft.com/en-us/troubleshoot/windows-server/remote/log-files-to-troubleshoot-rds-issues)
 
+## Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and release notes
+- **[Getting Started Guide](docs/GETTING_STARTED.md)** - Quick start tutorial and common scenarios
+- **[Quick Reference](docs/QUICK_REFERENCE.md)** - Event IDs cheat sheet and PowerShell one-liners
+- **[Kerberos/NTLM Authentication](docs/KERBEROS_NTLM_AUTHENTICATION.md)** - Deep dive into pre-authentication tracking
+- **[Release Notes](docs/releases/)** - Detailed release notes for all versions
+  - [v1.0.8](docs/releases/v1.0.8.md) - Event 4648, Parameter Sets, SessionID fix
+  - [v1.0.7](docs/releases/v1.0.7.md) - Correlation engine fixes
+  - [v1.0.6](docs/releases/v1.0.6.md) - Kerberos/NTLM tracking
+  - [v1.0.5](docs/releases/v1.0.5.md) - ActivityID correlation
+  - [v1.0.4](docs/releases/v1.0.4.md) - Session grouping
+
 ## Version History
 
-- **1.0** - Initial release
-  - Core forensics functionality
-  - Multi-log source collection
-  - CSV export capability
-  - Current session monitoring
+See [CHANGELOG.md](CHANGELOG.md) for complete version history.
+
+**Latest: v1.0.8** (2025-12-17)
+- Event 4648 support with time-based correlation
+- PowerShell Parameter Sets (LogonID/SessionID mutual exclusivity)
+- SessionID filtering fix
+- Enhanced lifecycle tracking
+- Removed Get-CurrentRDPSessions -SessionID parameter
 
 ## License
 
