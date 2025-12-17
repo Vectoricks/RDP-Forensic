@@ -540,25 +540,37 @@ function Get-CurrentRDPSessions {
                 Write-Host "$(Get-Emoji 'chart') RECENT LOGON INFORMATION" -ForegroundColor Yellow
                 Write-Host ("-" * 80) -ForegroundColor DarkGreen
                 foreach ($session in $sessionObjects | Where-Object { $_.Username -ne 'N/A' }) {
-                    $recentLogon = Get-WinEvent -FilterHashtable @{
+                    # Check for reconnection first (4778), then initial logon (4624)
+                    $recentActivity = Get-WinEvent -FilterHashtable @{
                         LogName = 'Security'
-                        Id      = 4624
-                    } -MaxEvents 100 -ErrorAction SilentlyContinue | Where-Object {
-                        $_.Message -match $session.Username -and $_.Message -match 'Logon Type:\s+(10|7)\s'
+                        Id      = 4778
+                    } -MaxEvents 50 -ErrorAction SilentlyContinue | Where-Object {
+                        $_.Message -match [regex]::Escape($session.Username)
                     } | Select-Object -First 1
+                    
+                    if (-not $recentActivity) {
+                        $recentActivity = Get-WinEvent -FilterHashtable @{
+                            LogName = 'Security'
+                            Id      = 4624
+                        } -MaxEvents 100 -ErrorAction SilentlyContinue | Where-Object {
+                            $_.Message -match [regex]::Escape($session.Username) -and $_.Message -match 'Logon Type:\s+(10|7)\s'
+                        } | Select-Object -First 1
+                    }
                 
-                    if ($recentLogon) {
-                        $sourceIP = if ($recentLogon.Message -match 'Source Network Address:\s+([^\r\n]+)') { 
-                            $matches[1].Trim() 
+                    if ($recentActivity) {
+                        $sourceIP = if ($recentActivity.Message -match '(Source Network Address|Client Address):\s+([^\r\n]+)') { 
+                            $matches[2].Trim() 
                         }
                         else { 
                             'N/A' 
                         }
+                        
+                        $activityType = if ($recentActivity.Id -eq 4778) { "Last activity" } else { "Last logon" }
                     
                         Write-Host "  $(Get-Emoji 'check') " -ForegroundColor Green -NoNewline
                         Write-Host "$($session.Username)" -ForegroundColor Cyan -NoNewline
-                        Write-Host " - Last logon: " -ForegroundColor Gray -NoNewline
-                        Write-Host "$($recentLogon.TimeCreated)" -ForegroundColor White -NoNewline
+                        Write-Host " - $activityType" -ForegroundColor Gray -NoNewline
+                        Write-Host ": $($recentActivity.TimeCreated)" -ForegroundColor White -NoNewline
                         Write-Host " from " -ForegroundColor Gray -NoNewline
                         Write-Host "$sourceIP" -ForegroundColor Yellow
                     }
