@@ -1472,7 +1472,7 @@ $($allEvents | Where-Object { $_.SourceIP -ne 'N/A' -and $_.SourceIP -ne 'Local 
         Write-Host "`n$(Get-Emoji 'warning') No RDP events found matching the criteria." -ForegroundColor Yellow
     }
 
-    # Return the events for pipeline usage
-    return $allEvents
+    # Note: Function displays results directly to host, no pipeline output
+    # To capture events for pipeline use, export to CSV and reimport
 }
 
