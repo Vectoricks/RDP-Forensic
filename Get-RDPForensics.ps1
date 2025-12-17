@@ -202,7 +202,8 @@ function Get-RDPForensics {
             $correlationKey = $null
             
             # Priority 1: Use LogonID from Security log events (best cross-log correlation)
-            if ($event.LogonID -and $event.LogonID -ne 'N/A' -and $event.LogonID -ne $null) {
+            # Exception: Event 4648 uses SubjectLogonID (not the session LogonID) - skip direct correlation
+            if ($event.EventID -ne 4648 -and $event.LogonID -and $event.LogonID -ne 'N/A' -and $event.LogonID -ne $null) {
                 $correlationKey = "LogonID:$($event.LogonID)"
             }
             # Priority 2: Use SessionID from TerminalServices events
@@ -211,6 +212,7 @@ function Get-RDPForensics {
             }
             # Note: ActivityID is preserved in events for forensic analysis but not used for correlation
             # as it's provider-specific and doesn't reliably match across Security/TerminalServices logs
+            # Note: Event 4648 uses time-based correlation instead (SubjectLogonID ≠ session LogonID)
             
             if ($correlationKey) {
                 if (-not $sessionMap.ContainsKey($correlationKey)) {
@@ -251,9 +253,10 @@ function Get-RDPForensics {
                 }
                 
                 # Track lifecycle stages
+                # Note: Event 4648 excluded from direct correlation - uses time-based correlation instead
                 switch ($event.EventID) {
                     1149 { $sessionMap[$correlationKey].Lifecycle.ConnectionAttempt = $true }
-                    { $_ -in 4624, 4648, 4776 } { $sessionMap[$correlationKey].Lifecycle.Authentication = $true }
+                    { $_ -in 4624, 4776 } { $sessionMap[$correlationKey].Lifecycle.Authentication = $true }
                     { $_ -in 21, 22 } { $sessionMap[$correlationKey].Lifecycle.Logon = $true }
                     { $_ -in 24, 25, 4778, 4801 } { $sessionMap[$correlationKey].Lifecycle.Active = $true }
                     { $_ -in 39, 40, 4779, 4800 } { $sessionMap[$correlationKey].Lifecycle.Disconnect = $true }
@@ -270,13 +273,14 @@ function Get-RDPForensics {
             }
         }
         
-        # Time-based correlation for pre-authentication events (4768-4772, 4776)
-        # These events are logged on DC with different ActivityID than TS events
-        # Match pre-auth events to sessions within 10 seconds before session start with matching username
+        # Time-based correlation for pre-authentication and credential events
+        # These events have different LogonIDs/ActivityIDs than the actual session:
+        # - 4768-4772, 4776: Pre-auth events logged on DC
+        # - 4648: Credential submission with SubjectLogonID (not the new session LogonID)
+        # Match these events to sessions within 10 seconds before session start with matching username/IP
         # IMPORTANT: Only include pre-auth events that correlate to RDP sessions (Logon Type 10/7/3/5)
-        # This filters out non-RDP authentications (SMB, SQL, Exchange, etc.)
         $preAuthEvents = $Events | Where-Object { 
-            $_.EventID -in 4768, 4769, 4770, 4771, 4772, 4776 -and 
+            $_.EventID -in 4648, 4768, 4769, 4770, 4771, 4772, 4776 -and 
             -not $_.CorrelationKey 
         }
         
@@ -286,14 +290,18 @@ function Get-RDPForensics {
             $matchedSession = $null
             $closestTimeDiff = [TimeSpan]::MaxValue
             
-            # Find the closest RDP session that starts within 10 seconds after this pre-auth event with same user
+            # Find the closest RDP session that starts within 10 seconds after this pre-auth event
             foreach ($sessionKey in $sessionMap.Keys) {
                 $session = $sessionMap[$sessionKey]
-                if ($session.User -eq $preAuthEvent.User) {
+                $matchUser = $session.User -eq $preAuthEvent.User
+                $matchIP = (-not $preAuthEvent.SourceIP -or $preAuthEvent.SourceIP -eq 'N/A' -or 
+                           $session.SourceIP -eq $preAuthEvent.SourceIP)
+                
+                if ($matchUser -and $matchIP) {
                     $sessionStart = ($session.Events | Sort-Object TimeCreated | Select-Object -First 1).TimeCreated
                     $timeDiff = $sessionStart - $preAuthEvent.TimeCreated
                     
-                    # Pre-auth events should be 0-10 seconds BEFORE session start
+                    # Pre-auth/credential events should be 0-10 seconds BEFORE session start
                     if ($timeDiff.TotalSeconds -ge 0 -and $timeDiff.TotalSeconds -le 10) {
                         if ($timeDiff -lt $closestTimeDiff) {
                             $closestTimeDiff = $timeDiff
@@ -318,7 +326,7 @@ function Get-RDPForensics {
         # Only keep pre-auth events that matched to RDP sessions (Logon Type 10/7/3/5)
         $Events = $Events | Where-Object {
             # Keep all non-pre-auth events
-            ($_.EventID -notin 4768, 4769, 4770, 4771, 4772, 4776) -or
+            ($_.EventID -notin 4648, 4768, 4769, 4770, 4771, 4772, 4776) -or
             # OR keep pre-auth events that were correlated to RDP sessions
             ($_.CorrelatedToRDP -eq $true)
         }
