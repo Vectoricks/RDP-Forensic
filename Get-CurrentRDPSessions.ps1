@@ -366,7 +366,10 @@ function Get-CurrentRDPSessions {
                             $eventLogConnectTime = $null
                             
                             if ($username -and $username -ne '') {
-                                # Priority 1: Check Security Event 4778 (reconnection)
+                                # Collect all potential connection events and use the most recent one
+                                $candidateEvents = @()
+                                
+                                # Check Security Event 4778 (reconnection)
                                 $reconnectEvent = Get-WinEvent -FilterHashtable @{
                                     LogName = 'Security'
                                     Id      = 4778
@@ -375,53 +378,53 @@ function Get-CurrentRDPSessions {
                                 } | Select-Object -First 1
                                 
                                 if ($reconnectEvent) {
-                                    $eventLogConnectTime = $reconnectEvent.TimeCreated
+                                    $candidateEvents += $reconnectEvent
                                 }
                                 
-                                # Priority 2: Check Terminal Services Event 25 (reconnection)
-                                if (-not $eventLogConnectTime) {
-                                    $tsReconnect = Get-WinEvent -FilterHashtable @{
-                                        LogName = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
-                                        Id      = 25
-                                    } -MaxEvents 50 -ErrorAction SilentlyContinue | Where-Object {
-                                        $_.Message -match [regex]::Escape($username) -and
-                                        $_.Properties[0].Value -eq $id  # Session ID
-                                    } | Select-Object -First 1
-                                    
-                                    if ($tsReconnect) {
-                                        $eventLogConnectTime = $tsReconnect.TimeCreated
-                                    }
+                                # Check Terminal Services Event 25 (reconnection)
+                                $tsReconnect = Get-WinEvent -FilterHashtable @{
+                                    LogName = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+                                    Id      = 25
+                                } -MaxEvents 50 -ErrorAction SilentlyContinue | Where-Object {
+                                    $_.Message -match [regex]::Escape($username) -and
+                                    $_.Properties[0].Value -eq $id  # Session ID
+                                } | Select-Object -First 1
+                                
+                                if ($tsReconnect) {
+                                    $candidateEvents += $tsReconnect
                                 }
                                 
-                                # Priority 3: Check Security Event 4624 (initial logon)
-                                if (-not $eventLogConnectTime) {
-                                    $logonEvent = Get-WinEvent -FilterHashtable @{
-                                        LogName = 'Security'
-                                        Id      = 4624
-                                    } -MaxEvents 100 -ErrorAction SilentlyContinue | Where-Object {
-                                        $_.Message -match [regex]::Escape($username) -and 
-                                        $_.Message -match 'Logon Type:\s+(10|7)\s' -and
-                                        ($clientIP -and $_.Message -match [regex]::Escape($clientIP))
-                                    } | Select-Object -First 1
-                                    
-                                    if ($logonEvent) {
-                                        $eventLogConnectTime = $logonEvent.TimeCreated
-                                    }
+                                # Check Security Event 4624 (initial logon)
+                                $logonEvent = Get-WinEvent -FilterHashtable @{
+                                    LogName = 'Security'
+                                    Id      = 4624
+                                } -MaxEvents 100 -ErrorAction SilentlyContinue | Where-Object {
+                                    $_.Message -match [regex]::Escape($username) -and 
+                                    $_.Message -match 'Logon Type:\s+(10|7)\s' -and
+                                    ($clientIP -and $_.Message -match [regex]::Escape($clientIP))
+                                } | Select-Object -First 1
+                                
+                                if ($logonEvent) {
+                                    $candidateEvents += $logonEvent
                                 }
                                 
-                                # Priority 4: Check Terminal Services Event 21 (session logon) or 22 (shell start)
-                                if (-not $eventLogConnectTime) {
-                                    $tsLogon = Get-WinEvent -FilterHashtable @{
-                                        LogName = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
-                                        Id      = 21, 22
-                                    } -MaxEvents 100 -ErrorAction SilentlyContinue | Where-Object {
-                                        $_.Message -match [regex]::Escape($username) -and
-                                        $_.Properties[0].Value -eq $id  # Session ID
-                                    } | Select-Object -First 1
-                                    
-                                    if ($tsLogon) {
-                                        $eventLogConnectTime = $tsLogon.TimeCreated
-                                    }
+                                # Check Terminal Services Event 21 (session logon) or 22 (shell start)
+                                $tsLogon = Get-WinEvent -FilterHashtable @{
+                                    LogName = 'Microsoft-Windows-TerminalServices-LocalSessionManager/Operational'
+                                    Id      = 21, 22
+                                } -MaxEvents 100 -ErrorAction SilentlyContinue | Where-Object {
+                                    $_.Message -match [regex]::Escape($username) -and
+                                    $_.Properties[0].Value -eq $id  # Session ID
+                                } | Select-Object -First 1
+                                
+                                if ($tsLogon) {
+                                    $candidateEvents += $tsLogon
+                                }
+                                
+                                # Use the most recent event from all candidates
+                                if ($candidateEvents.Count -gt 0) {
+                                    $mostRecentEvent = $candidateEvents | Sort-Object TimeCreated -Descending | Select-Object -First 1
+                                    $eventLogConnectTime = $mostRecentEvent.TimeCreated
                                 }
                             }
                             
