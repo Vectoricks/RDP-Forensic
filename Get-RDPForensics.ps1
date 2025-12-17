@@ -1414,6 +1414,10 @@ function Get-RDPForensics {
                 else {
                     Write-Host ""
                 }
+                
+                # Display event table for this session
+                Write-Host ""
+                $session.Events | Sort-Object TimeCreated | Format-Table TimeCreated, EventID, EventType, User, SourceIP, SessionID, LogonID, Details -AutoSize
             }
             
             if ($sessions.Count -gt 20) {
