@@ -1344,6 +1344,29 @@ function Get-RDPForensics {
             Write-Host "$preAuthCount" -ForegroundColor White -NoNewline
             Write-Host " pre-auth events correlated to RDP sessions (non-RDP auth filtered out)" -ForegroundColor Green
         }
+        
+        # Post-correlation filtering: Only show sessions that match SessionID/LogonID
+        if ($SessionID) {
+            $sessions = $sessions | Where-Object { 
+                $_.Events | Where-Object { $_.SessionID -eq $SessionID -or $_.SessionID -eq [string]$SessionID } 
+            }
+            if ($sessions.Count -eq 0) {
+                Write-Host "  $(Get-Emoji 'warning') No sessions found with SessionID: $SessionID" -ForegroundColor Yellow
+            } else {
+                # Update event list to only show events from filtered sessions
+                $allEvents = @($sessions | ForEach-Object { $_.Events }) | Sort-Object TimeCreated -Descending
+            }
+        }
+        
+        if ($LogonID) {
+            $sessions = $sessions | Where-Object { $_.LogonID -eq $LogonID }
+            if ($sessions.Count -eq 0) {
+                Write-Host "  $(Get-Emoji 'warning') No sessions found with LogonID: $LogonID" -ForegroundColor Yellow
+            } else {
+                # Update event list to only show events from filtered sessions
+                $allEvents = @($sessions | ForEach-Object { $_.Events }) | Sort-Object TimeCreated -Descending
+            }
+        }
     }
 
     # Display results
