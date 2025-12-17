@@ -1336,9 +1336,24 @@ function Get-RDPForensics {
         
         if ($SessionID) {
             Write-Host "  $(Get-Emoji 'magnify') Filtering for SessionID: $SessionID" -ForegroundColor Cyan
-            $sessions = $sessions | Where-Object { $_.SessionID -eq $SessionID }
+            # Filter sessions that contain events with the specified SessionID
+            $sessions = $sessions | Where-Object { 
+                $_.Events | Where-Object { $_.SessionID -eq $SessionID -or $_.SessionID -eq [string]$SessionID }
+            }
             if ($sessions.Count -eq 0) {
                 Write-Host "  $(Get-Emoji 'warning') No sessions found with SessionID: $SessionID" -ForegroundColor Yellow
+            }
+            else {
+                # Filter events within each session to only show events with matching SessionID or null SessionID
+                # (Security events don't have SessionID but are part of the same logical session)
+                foreach ($session in $sessions) {
+                    $matchingEvents = $session.Events | Where-Object { 
+                        -not $_.SessionID -or $_.SessionID -eq 'N/A' -or 
+                        $_.SessionID -eq $SessionID -or $_.SessionID -eq [string]$SessionID 
+                    }
+                    $session.Events = @($matchingEvents)
+                    $session.EventCount = $matchingEvents.Count
+                }
             }
         }
         
